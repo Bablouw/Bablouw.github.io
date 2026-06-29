@@ -1,0 +1,3032 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Матрица коллизий • Navisworks</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Roboto+Mono:wght@400;500&amp;display=swap');
+    
+    :root {
+      --primary: #0f172a;
+    }
+    
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    
+    .mono {
+      font-family: 'Roboto Mono', ui-monospace, monospace;
+    }
+
+    .matrix-table {
+      border-collapse: collapse;
+      min-width: 100%;
+    }
+    
+    .matrix-table th, .matrix-table td {
+      border: 1px solid #cbd5e1;
+      padding: 8px 10px;
+      text-align: center;
+      vertical-align: middle;
+      font-size: 13px;
+    }
+    
+    .matrix-table th {
+      background: #f1e7ff;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    
+    .matrix-table th.row-header {
+      background: #e0e7ff;
+      text-align: left;
+      font-weight: 600;
+      position: sticky;
+      left: 0;
+      z-index: 20;
+    }
+    
+    .matrix-cell {
+      cursor: pointer;
+      transition: transform 0.1s, background 0.1s;
+      min-width: 42px;
+      height: 38px;
+    }
+    
+    .matrix-cell:hover {
+      transform: scale(1.05);
+      z-index: 5;
+      box-shadow: 0 0 0 2px #6366f1;
+    }
+    
+    .matrix-cell.zero {
+      background: #f8fafc;
+      color: #64748b;
+    }
+    
+    .clash-row {
+      font-size: 13px;
+    }
+
+    .property-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: #e0e7ff;
+      color: #3730a3;
+    }
+
+    .navis-blue { background-color: #99ccff; }
+    .navis-red { background-color: #ffcccc; }
+
+    /* Fullscreen mode styles for the clash matrix */
+    :fullscreen {
+      background: #f1f5f9;
+    }
+
+    :fullscreen #matrix-container,
+    .matrix-fullscreen-fallback #matrix-container {
+      max-height: calc(100vh - 70px) !important;
+      height: calc(100vh - 70px);
+      overflow: auto;
+      padding: 10px !important;
+    }
+
+    :fullscreen .matrix-table th,
+    :fullscreen .matrix-table td,
+    .matrix-fullscreen-fallback .matrix-table th,
+    .matrix-fullscreen-fallback .matrix-table td {
+      padding: 6px 9px;
+      font-size: 13.5px;
+    }
+
+    .matrix-fullscreen-fallback {
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 999999 !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      box-shadow: none !important;
+      overflow: hidden !important;
+    }
+
+    .matrix-fullscreen-fallback .px-4.py-3 {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    /* Floating exit hint in fallback */
+    .matrix-fs-exit-hint {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 1000000;
+      background: rgba(15, 23, 42, 0.85);
+      color: white;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+    }
+
+    .matrix-sortable {
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.12s;
+    }
+
+    .matrix-sortable:hover {
+      filter: brightness(0.96);
+    }
+
+    .matrix-sort-active {
+      box-shadow: inset 0 -2px 0 #6366f1;
+    }
+
+    .matrix-col-header-vertical {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      white-space: nowrap;
+      min-height: 90px;
+      height: 90px;
+      padding: 4px 6px !important;
+      vertical-align: bottom;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="max-w-screen-2xl mx-auto">
+    <!-- Header -->
+    <div class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+      <div class="flex items-center gap-x-3">
+        <div class="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center text-white">
+          <i class="fa-solid fa-table-cells fa-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">Матрица коллизий</h1>
+          <p class="text-xs text-slate-500 -mt-0.5">Navisworks XML Report Analyzer <span id="file-name" class="ml-1 px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded">Отчёт не загружен</span></p>
+        </div>
+      </div>
+      
+      <div class="flex flex-wrap items-center justify-end gap-x-2 gap-y-2 text-sm">
+        <div id="history-controls"
+             class="flex items-center gap-0.5 px-1 py-0.5 bg-slate-100 border border-slate-200 rounded-lg"
+             title="Отмена и повтор изменений настроек (Ctrl+Z / Ctrl+Y)">
+          <button type="button" id="undo-btn" onclick="undoChange()"
+                  class="p-1.5 hover:bg-slate-200 rounded disabled:opacity-40 disabled:pointer-events-none"
+                  title="Отменить (Ctrl+Z)" disabled>
+            <i class="fa-solid fa-arrow-left text-xs"></i>
+          </button>
+          <button type="button" id="redo-btn" onclick="redoChange()"
+                  class="p-1.5 hover:bg-slate-200 rounded disabled:opacity-40 disabled:pointer-events-none"
+                  title="Повторить (Ctrl+Y)" disabled>
+            <i class="fa-solid fa-arrow-right text-xs"></i>
+          </button>
+        </div>
+        <div id="profile-controls"
+             class="flex items-center gap-x-0.5 px-2 py-1 bg-violet-50 border border-violet-200 rounded-lg text-violet-800"
+             title="Профили настроек иерархии и фильтрации (в рамках сессии)">
+          <i class="fa-solid fa-bookmark text-xs ml-0.5"></i>
+          <select id="profile-select"
+                  onchange="onProfileSelectChange(this.value)"
+                  class="text-xs bg-transparent border-0 focus:ring-0 py-0.5 pl-1 pr-5 max-w-[160px] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
+            <option value="">Профиль…</option>
+          </select>
+          <button type="button" id="profile-save-btn" onclick="saveProfilePrompt()"
+                  class="p-1.5 hover:bg-violet-200 rounded disabled:opacity-40 disabled:pointer-events-none"
+                  title="Сохранить текущие настройки в профиль" disabled>
+            <i class="fa-solid fa-plus text-xs"></i>
+          </button>
+          <button type="button" id="profile-delete-btn" onclick="deleteSelectedProfile()"
+                  class="p-1.5 hover:bg-violet-200 rounded disabled:opacity-40 disabled:pointer-events-none"
+                  title="Удалить выбранный профиль" disabled>
+            <i class="fa-solid fa-trash-can text-xs"></i>
+          </button>
+          <span class="text-violet-300 mx-0.5">|</span>
+          <button type="button" onclick="exportProfiles()"
+                  class="p-1.5 hover:bg-violet-200 rounded"
+                  title="Экспорт профилей в JSON-файл">
+            <i class="fa-solid fa-file-export text-xs"></i>
+          </button>
+          <button type="button" onclick="triggerProfileImport()"
+                  class="p-1.5 hover:bg-violet-200 rounded"
+                  title="Импорт профилей из JSON-файла">
+            <i class="fa-solid fa-file-import text-xs"></i>
+          </button>
+          <input type="file" id="profile-import-input" accept=".json,application/json" class="hidden"
+                 onchange="handleProfileImport(event)">
+        </div>
+        <button onclick="resetAll()"
+                class="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg flex items-center gap-x-1.5">
+          <i class="fa-solid fa-undo"></i>
+          <span>Сброс</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="p-6">
+      <!-- Loader -->
+      <div id="loader-section" class="mb-6">
+        <div class="border border-dashed border-slate-300 rounded-2xl p-6 bg-white">
+          <div class="flex flex-col items-center justify-center gap-y-3 text-center">
+            <i class="fa-solid fa-upload text-3xl text-slate-400"></i>
+            <div>
+              <p class="font-medium">Загрузите XML-отчёт Navisworks</p>
+              <p class="text-xs text-slate-500 mt-0.5">Проверка 1.xml — поддерживаются динамические параметры (objectattribute + smarttags). Свойства, отсутствующие в файле, просто не появятся в списке.</p>
+            </div>
+            <input type="file" id="file-input" accept=".xml,.html" class="hidden" onchange="handleFileLoad(event)">
+            <div class="flex gap-x-3">
+              <button onclick="document.getElementById('file-input').click()" 
+                      class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm flex items-center gap-x-2">
+                <i class="fa-solid fa-folder-open"></i>
+                <span>Выбрать файл</span>
+              </button>
+              <button onclick="loadDemoData()" 
+                      class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl text-sm flex items-center gap-x-2">
+                <span>Использовать демо</span>
+              </button>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1">Файл обрабатывается только в браузере. Ничего не отправляется.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div id="controls" class="hidden mb-4 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+        <div class="flex flex-wrap gap-6">
+          <!-- Row Hierarchy -->
+          <div class="flex-1 min-w-[280px]">
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-xs font-semibold text-blue-700">Иерархия строк (Элемент 1)</label>
+              <button onclick="clearRowHierarchy()" class="text-[10px] text-blue-500 hover:underline">очистить</button>
+            </div>
+            <div id="row-hierarchy" class="flex flex-wrap gap-1 min-h-[26px] mb-1 p-1 border rounded bg-blue-50 text-xs"></div>
+            <div class="flex gap-1">
+              <select id="row-level-add" class="flex-1 text-xs border rounded px-2 py-1"></select>
+              <button onclick="addRowLevel()" class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">+ уровень</button>
+            </div>
+          </div>
+
+          <!-- Column Hierarchy -->
+          <div class="flex-1 min-w-[280px]">
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-xs font-semibold text-red-700">Иерархия столбцов (Элемент 2)</label>
+              <button onclick="clearColHierarchy()" class="text-[10px] text-red-500 hover:underline">очистить</button>
+            </div>
+            <div id="col-hierarchy" class="flex flex-wrap gap-1 min-h-[26px] mb-1 p-1 border rounded bg-red-50 text-xs"></div>
+            <div class="flex gap-1">
+              <select id="col-level-add" class="flex-1 text-xs border rounded px-2 py-1"></select>
+              <button onclick="addColLevel()" class="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">+ уровень</button>
+            </div>
+          </div>
+
+          <div class="flex items-end pb-1">
+            <button onclick="buildMatrix()" 
+                    class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-medium rounded-xl text-sm flex items-center gap-x-2 h-fit">
+              <i class="fa-solid fa-sync-alt"></i>
+              <span>Обновить матрицу</span>
+            </button>
+          </div>
+
+          <div class="flex-1"></div>
+
+          <div class="flex items-center gap-x-4 text-sm">
+            <button id="mirror-mode-btn"
+                    onclick="toggleMirrorMode()"
+                    class="px-3 py-1.5 text-xs border border-slate-300 bg-white hover:bg-slate-50 rounded-lg flex items-center gap-x-1.5 transition-colors"
+                    title="Дублировать коллизии с заменой Элемента 1 и Элемента 2 для симметричной матрицы">
+              <i class="fa-solid fa-right-left"></i>
+              <span>Отзеркаливание</span>
+            </button>
+            <button onclick="transposeMatrix()"
+                    class="px-3 py-1.5 text-xs border border-slate-300 bg-white hover:bg-slate-50 rounded-lg flex items-center gap-x-1.5 transition-colors"
+                    title="Транспонировать: поменять строки и столбцы матрицы местами">
+              <i class="fa-solid fa-shuffle"></i>
+              <span>Матрица</span>
+            </button>
+            <button onclick="exportCSV()" class="px-3 py-1.5 text-xs border border-slate-300 hover:bg-slate-50 rounded-lg flex items-center gap-x-1.5">
+              <i class="fa-solid fa-download"></i>
+              <span>CSV</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filters Section -->
+        <div class="mt-4 pt-4 border-t border-slate-200">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <!-- Test / Проверка filter -->
+            <div>
+              <div class="flex items-center justify-between mb-1 gap-2">
+                <label class="text-xs font-medium text-slate-600">Фильтр по проверке</label>
+                <div id="test-filters-actions" class="hidden flex items-center gap-2 text-[10px] shrink-0">
+                  <button type="button" onclick="selectAllTests()"
+                          class="text-violet-600 hover:text-violet-800 hover:underline">Все</button>
+                  <span class="text-slate-300">|</span>
+                  <button type="button" onclick="deselectAllTests()"
+                          class="text-slate-500 hover:text-slate-700 hover:underline">Снять все</button>
+                </div>
+              </div>
+              <div id="test-filters" class="flex flex-wrap gap-x-3 gap-y-1 text-xs max-h-20 overflow-auto"></div>
+            </div>
+
+            <!-- Status filter -->
+            <div>
+              <div class="flex items-center justify-between mb-1 gap-2">
+                <label class="text-xs font-medium text-slate-600">Фильтр по статусу</label>
+                <div id="status-filters-actions" class="hidden flex items-center gap-2 text-[10px] shrink-0">
+                  <button type="button" onclick="selectAllStatuses()"
+                          class="text-violet-600 hover:text-violet-800 hover:underline">Все</button>
+                  <span class="text-slate-300">|</span>
+                  <button type="button" onclick="deselectAllStatuses()"
+                          class="text-slate-500 hover:text-slate-700 hover:underline">Снять все</button>
+                </div>
+              </div>
+              <div id="status-filters" class="flex flex-wrap gap-x-3 gap-y-1 text-xs max-h-20 overflow-auto"></div>
+            </div>
+
+            <!-- Global search -->
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Поиск (в любом параметре)</label>
+              <input id="global-search" type="text" 
+                     class="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-violet-400"
+                     placeholder="Введите текст для поиска..." oninput="debouncedRebuild()">
+            </div>
+
+            <div class="flex items-end">
+              <button onclick="clearAllFilters()" 
+                      class="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl flex items-center gap-x-1">
+                <i class="fa-solid fa-times"></i>
+                <span>Очистить все фильтры</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Advanced property filters -->
+          <div class="mt-3">
+            <div class="flex items-center gap-2 mb-1">
+              <label class="text-xs font-medium text-slate-600">Дополнительные фильтры</label>
+              <button onclick="addPropertyFilterRow()" 
+                      class="text-xs bg-violet-100 hover:bg-violet-200 text-violet-700 px-2 py-0.5 rounded flex items-center gap-1">
+                <i class="fa-solid fa-plus"></i> <span>Добавить фильтр</span>
+              </button>
+            </div>
+            <div id="property-filter-rows" class="space-y-2 text-xs"></div>
+          </div>
+        </div>
+
+        <div class="mt-3 text-xs text-slate-500 flex items-center gap-x-2">
+          <div id="stats" class="font-medium text-slate-700"></div>
+          <div class="flex-1 h-px bg-slate-200"></div>
+          <div>Клик по ячейке — список коллизий</div>
+        </div>
+      </div>
+
+      <!-- Matrix -->
+      <div id="matrix-section" class="hidden">
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div class="px-4 py-3 border-b bg-slate-50 flex items-center justify-between">
+            <div class="font-semibold flex items-center gap-x-2">
+              <span>Матрица коллизий</span>
+              <span id="matrix-title" class="text-xs px-2 py-0.5 bg-white border rounded text-slate-500"></span>
+            </div>
+
+            <div class="flex items-center gap-x-2">
+              <div class="text-xs text-slate-400">Количество пересечений</div>
+              <button id="fullscreen-btn"
+                      onclick="toggleMatrixFullscreen()"
+                      class="px-2.5 py-1 text-xs bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-300 rounded-lg flex items-center gap-x-1.5 transition-colors"
+                      title="Полноэкранный режим (F)">
+                <i class="fa-solid fa-expand" id="fs-icon"></i>
+                <span class="hidden sm:inline" id="fs-text">Полный экран</span>
+              </button>
+            </div>
+          </div>
+          <div class="p-3 overflow-auto max-h-[620px]" id="matrix-container">
+            <!-- JS renders table here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Details modal -->
+      <div id="details-modal" onclick="if (event.target.id === 'details-modal') hideModal()" class="hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+        <div onclick="event.stopImmediatePropagation()" class="bg-white w-full max-w-3xl max-h-[85vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
+          <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+            <div>
+              <span class="font-semibold" id="modal-title"></span>
+              <span id="modal-count" class="ml-2 px-2 py-0.5 text-xs rounded bg-violet-100 text-violet-700"></span>
+            </div>
+            <button onclick="hideModal()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-times fa-lg"></i></button>
+          </div>
+          <div class="p-4 overflow-auto flex-1 text-sm" id="modal-body">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Raw data hint -->
+      <div id="raw-hint" class="hidden mt-4 text-xs text-slate-500">
+        Загружено <span id="clash-count"></span> коллизий.
+        <span id="mirror-hint" class="hidden text-emerald-600 font-medium">Режим отзеркаливания: каждая коллизия учтена в обоих направлениях (A↔B).</span>
+        Доступные свойства определяются автоматически.
+      </div>
+    </div>
+
+    <footer class="px-6 pb-5 pt-1 border-t border-slate-100 mt-2">
+      <div class="text-xs text-slate-400 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+        <a href="https://dzen.ru/a/ajkgTkjrcUrV29xo"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="inline-flex items-center gap-1 hover:text-violet-600 transition-colors">
+          <i class="fa-solid fa-book-open"></i>
+          <span>Инструкция</span>
+        </a>
+        <span class="text-slate-300" aria-hidden="true">·</span>
+        <a href="https://t.me/kuznetsov_bim"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="inline-flex items-center gap-1 hover:text-violet-600 transition-colors">
+          <i class="fa-brands fa-telegram"></i>
+          <span>Telegram автора</span>
+        </a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // Global data
+    let clashes = [];
+    let rawClashes = [];      // исходные данные без отзеркаливания
+    let mirrorMode = false;   // режим A↔B: каждая коллизия дублируется с заменой сторон
+    let availableProps1 = [];
+    let availableProps2 = [];
+    let uniqueTests = [];
+    let activeTestFilters = []; // array of test names that are checked
+    let uniqueStatuses = [];
+    let activeStatusFilters = []; // array of status values that are checked
+    let propertyFilters = [];   // array of {id, prop, operator, value}
+    let searchTerm = '';
+    let filterTimeout = null;
+
+    // Hierarchical grouping
+    let rowHierarchy = [];  // e.g. ['Файл', 'Элемент Имя']
+    let colHierarchy = [];
+
+    // Session profiles (hierarchy + filters presets)
+    const PROFILE_FORMAT = 'clash-matrix-profiles';
+    const PROFILE_VERSION = 1;
+    const DEFAULT_PROFILES = {
+      format: PROFILE_FORMAT,
+      version: PROFILE_VERSION,
+      profiles: [
+        {
+          id: 'prof-1782310041486-m2by1',
+          name: 'Модель х Модель',
+          createdAt: '2026-06-24T14:07:21.486Z',
+          updatedAt: '2026-06-24T14:07:21.486Z',
+          state: {
+            rowHierarchy: ['Файл'],
+            colHierarchy: ['Файл'],
+            activeTestFilters: [
+              '01_ВК - ВК', '02_ОВ - ОВ', '03_ЭОМ - ЭОМ', '04_ОВ - ВИС', '05_ЭОМ - ВИС'
+            ],
+            activeStatusFilters: ['Активн.', 'Создать'],
+            propertyFilters: [],
+            globalSearch: '',
+            mirrorMode: false
+          }
+        },
+        {
+          id: 'prof-1782310061438-dr61i',
+          name: 'Категория х Категория',
+          createdAt: '2026-06-24T14:07:41.438Z',
+          updatedAt: '2026-06-24T14:07:41.438Z',
+          state: {
+            rowHierarchy: ['Объект Категория'],
+            colHierarchy: ['Объект Категория'],
+            activeTestFilters: [
+              '01_ВК - ВК', '02_ОВ - ОВ', '03_ЭОМ - ЭОМ', '04_ОВ - ВИС', '05_ЭОМ - ВИС'
+            ],
+            activeStatusFilters: ['Активн.', 'Создать'],
+            propertyFilters: [],
+            globalSearch: '',
+            mirrorMode: false
+          }
+        },
+        {
+          id: 'prof-1782310098155-egew5',
+          name: 'Модель > Категория',
+          createdAt: '2026-06-24T14:08:18.155Z',
+          updatedAt: '2026-06-24T14:08:18.155Z',
+          state: {
+            rowHierarchy: ['Файл', 'Объект Категория'],
+            colHierarchy: [],
+            activeTestFilters: [
+              '01_ВК - ВК', '02_ОВ - ОВ', '03_ЭОМ - ЭОМ', '04_ОВ - ВИС', '05_ЭОМ - ВИС'
+            ],
+            activeStatusFilters: ['Активн.', 'Создать'],
+            propertyFilters: [],
+            globalSearch: '',
+            mirrorMode: true
+          }
+        },
+        {
+          id: 'prof-1782310114302-7lh2t',
+          name: 'Модель > Рабочий набор',
+          createdAt: '2026-06-24T14:08:34.302Z',
+          updatedAt: '2026-06-24T14:08:34.302Z',
+          state: {
+            rowHierarchy: ['Файл', 'Объект Рабочий набор'],
+            colHierarchy: [],
+            activeTestFilters: [
+              '01_ВК - ВК', '02_ОВ - ОВ', '03_ЭОМ - ЭОМ', '04_ОВ - ВИС', '05_ЭОМ - ВИС'
+            ],
+            activeStatusFilters: ['Активн.', 'Создать'],
+            propertyFilters: [],
+            globalSearch: '',
+            mirrorMode: true
+          }
+        }
+      ]
+    };
+    let sessionProfiles = [];
+    let activeProfileId = null;
+    let suppressProfileDeselect = false;
+
+    function deselectActiveProfile() {
+      if (suppressProfileDeselect || !activeProfileId) return;
+      activeProfileId = null;
+      const select = document.getElementById('profile-select');
+      if (select) select.value = '';
+      updateProfileControlsState();
+    }
+
+    function tailwindInit() {
+      // Tailwind script already loaded via CDN
+    }
+
+    function cloneClash(clash, id) {
+      return {
+        ...clash,
+        id: id,
+        item1: clash.item1 ? { ...clash.item1 } : {},
+        item2: clash.item2 ? { ...clash.item2 } : {}
+      };
+    }
+
+    function mirrorClash(clash, id) {
+      return {
+        ...clash,
+        id: id,
+        item1: clash.item2 ? { ...clash.item2 } : {},
+        item2: clash.item1 ? { ...clash.item1 } : {}
+      };
+    }
+
+    function rebuildClashes() {
+      if (!rawClashes.length) {
+        clashes = [];
+        return;
+      }
+
+      const originals = rawClashes.map((c, i) => cloneClash(c, i + 1));
+      if (!mirrorMode) {
+        clashes = originals;
+        return;
+      }
+
+      const mirrored = rawClashes.map((c, i) => mirrorClash(c, rawClashes.length + i + 1));
+      clashes = [...originals, ...mirrored];
+    }
+
+    function updateClashCountDisplay() {
+      const el = document.getElementById('clash-count');
+      if (!el) return;
+
+      if (!rawClashes.length) {
+        el.textContent = '0';
+        return;
+      }
+
+      el.textContent = mirrorMode
+        ? `${rawClashes.length} × 2 = ${clashes.length}`
+        : String(rawClashes.length);
+    }
+
+    function updateMirrorModeUI() {
+      const btn = document.getElementById('mirror-mode-btn');
+      const hint = document.getElementById('mirror-hint');
+      if (!btn) return;
+
+      const label = btn.querySelector('span');
+      if (mirrorMode) {
+        btn.classList.add('bg-emerald-600', 'text-white', 'border-emerald-600', 'hover:bg-emerald-700');
+        btn.classList.remove('bg-white', 'hover:bg-slate-50', 'border-slate-300');
+        if (label) label.textContent = 'Отзеркаливание: ВКЛ';
+        if (hint) hint.classList.remove('hidden');
+      } else {
+        btn.classList.remove('bg-emerald-600', 'text-white', 'border-emerald-600', 'hover:bg-emerald-700');
+        btn.classList.add('bg-white', 'hover:bg-slate-50', 'border-slate-300');
+        if (label) label.textContent = 'Отзеркаливание';
+        if (hint) hint.classList.add('hidden');
+      }
+    }
+
+    function refreshPropertiesAndMatrix() {
+      const props = getAllProperties(clashes);
+      availableProps1 = props.item1;
+      availableProps2 = props.item2;
+      populatePropertySelectors();
+      updateClashCountDisplay();
+      updateMirrorModeUI();
+      buildMatrix();
+    }
+
+    function toggleMirrorMode() {
+      if (!rawClashes.length) {
+        alert('Сначала загрузите отчёт или демо-данные');
+        return;
+      }
+
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+      mirrorMode = !mirrorMode;
+      rebuildClashes();
+      refreshPropertiesAndMatrix();
+    }
+
+    function transposeMatrix() {
+      if (!rawClashes.length) {
+        alert('Сначала загрузите отчёт или демо-данные');
+        return;
+      }
+      if (rowHierarchy.length === 0 && colHierarchy.length === 0) {
+        alert('Добавьте уровни в иерархию строк или столбцов');
+        return;
+      }
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+      const tmp = rowHierarchy;
+      rowHierarchy = colHierarchy;
+      colHierarchy = tmp;
+      renderHierarchyUI();
+      buildMatrix();
+    }
+
+    function parseNavisworksXML(xmlString) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlString, 'text/xml');
+
+      const result = [];
+      let clashId = 1;
+
+      // Find all clashtest elements (each represents one "Проверка")
+      const clashtests = doc.querySelectorAll('clashtest');
+
+      if (clashtests.length === 0) {
+        // Fallback for flat structure (single test in older exports)
+        const flatResults = doc.querySelectorAll('clashresult');
+        Array.from(flatResults).forEach((clashEl) => {
+          const parsed = parseSingleClashResult(clashEl, 'Проверка (без имени)', clashId++);
+          if (parsed) result.push(parsed);
+        });
+        return result;
+      }
+
+      Array.from(clashtests).forEach((testEl) => {
+        const testName = testEl.getAttribute('name') || 'Без названия';
+        // Find clashresults inside this test
+        const clashResults = testEl.querySelectorAll('clashresults > clashresult, clashresult');
+        
+        Array.from(clashResults).forEach((clashEl) => {
+          const parsed = parseSingleClashResult(clashEl, testName, clashId++);
+          if (parsed) result.push(parsed);
+        });
+      });
+
+      return result;
+    }
+
+    function parseSingleClashResult(clashEl, testName, id) {
+      if (!clashEl) return null;
+
+      const clashName = clashEl.getAttribute('name') || `Конфликт${id}`;
+      const guid = clashEl.getAttribute('guid') || '';
+      const statusAttr = clashEl.getAttribute('status') || '';
+      const distanceAttr = clashEl.getAttribute('distance') || '';
+
+      const descriptionEl = clashEl.querySelector('description');
+      const resultStatusEl = clashEl.querySelector('resultstatus');
+      const status = resultStatusEl ? resultStatusEl.textContent.trim() : (statusAttr || 'Активн.');
+      const distance = parseFloat(distanceAttr) || 0;
+      const description = descriptionEl ? descriptionEl.textContent.trim() : '';
+
+      const clashObjects = clashEl.querySelectorAll('clashobjects > clashobject, clashobject');
+      const item1 = clashObjects.length >= 1 ? parseClashObject(clashObjects[0]) : {};
+      const item2 = clashObjects.length >= 2 ? parseClashObject(clashObjects[1]) : {};
+
+      return {
+        id: id,
+        testName: testName,
+        name: clashName,
+        guid: guid,
+        status: status,
+        distance: distance,
+        description: description,
+        clashName: clashName,
+        item1: item1,
+        item2: item2
+      };
+    }
+
+    function parseClashObject(objEl) {
+      if (!objEl) return {};
+      const props = {};
+
+      // Layer
+      const layerEl = objEl.querySelector('layer');
+      if (layerEl && layerEl.textContent.trim()) {
+        props['Уровень'] = layerEl.textContent.trim();
+      }
+
+      // Path from pathlink
+      const pathNodes = Array.from(objEl.querySelectorAll('pathlink > node, path > node'));
+      if (pathNodes.length > 0) {
+        const path = pathNodes.map(n => n.textContent.trim()).filter(Boolean).join(' > ');
+        props['Путь'] = path;
+
+        // Derive useful high-level properties
+        const modelNode = pathNodes.find(n => /\.(nwc|nwd|dwg)$/i.test(n.textContent));
+        if (modelNode) props['Модель'] = modelNode.textContent.trim();
+
+        // Heuristic for file segment from pathlink
+        if (pathNodes.length >= 4) {
+          for (let i = 2; i < Math.min(pathNodes.length - 1, 6); i++) {
+            const candidate = pathNodes[i].textContent.trim();
+            if (candidate && !/^(Файл|Уровень|Этаж|Модель)/i.test(candidate) && candidate.length > 2) {
+              props['Файл'] = candidate;
+              break;
+            }
+          }
+        }
+      }
+
+      // Dynamic object attributes (main source of new parameters)
+      objEl.querySelectorAll('objectattribute').forEach(attr => {
+        const nameEl = attr.querySelector('name');
+        const valueEl = attr.querySelector('value');
+        if (nameEl && valueEl) {
+          const name = nameEl.textContent.trim();
+          const value = valueEl.textContent.trim();
+          if (name && value) {
+            props[name] = value;
+          }
+        }
+      });
+
+      // Smart tags (often contain Element Category, Element Name, etc.)
+      objEl.querySelectorAll('smarttag, smarttags > smarttag').forEach(tag => {
+        const nameEl = tag.querySelector('name');
+        const valueEl = tag.querySelector('value');
+        if (nameEl && valueEl) {
+          const name = nameEl.textContent.trim();
+          const value = valueEl.textContent.trim();
+          if (name && value) {
+            // Prefer smarttag value if not already set by objectattribute, or prefix to avoid overwrite
+            if (!props[name]) {
+              props[name] = value;
+            } else if (props[name] !== value) {
+              props[name + ' (smart)'] = value;
+            }
+          }
+        }
+      });
+
+      // Add ID if found in attributes
+      if (!props['ID объекта'] && props['ID']) {
+        props['ID объекта'] = props['ID'];
+      }
+
+      return props;
+    }
+
+    // Old HTML-specific extractor removed. XML version uses parseClashObject() which is more dynamic.
+
+    function getAllProperties(clashes) {
+      const props1 = new Set();
+      const props2 = new Set();
+      const general = new Set();
+
+      clashes.forEach(c => {
+        if (c.item1) Object.keys(c.item1).forEach(k => { if (c.item1[k] != null && c.item1[k] !== '') props1.add(k); });
+        if (c.item2) Object.keys(c.item2).forEach(k => { if (c.item2[k] != null && c.item2[k] !== '') props2.add(k); });
+        
+        if (c.clashName) general.add('clashName');
+        if (c.status) general.add('status');
+        if (c.name) general.add('name');
+      });
+
+      // Make "Проверка" (clashtest name) available as a hierarchy level for both Element 1 and Element 2
+      const hasTestName = clashes.some(c => c.testName);
+      if (hasTestName) {
+        props1.add('testName');
+        props2.add('testName');
+      }
+
+      // Human readable labels - dynamic ones will fall back to the key name itself
+      const labelMap = {
+        'Уровень': 'Уровень',
+        'Путь': 'Путь',
+        'Модель': 'Модель',
+        'Файл': 'Файл',
+        'ID объекта': 'ID объекта',
+        'Элемент Имя': 'Элемент Имя',
+        'Элемент Тип': 'Элемент Тип',
+        'Элемент Категория': 'Элемент Категория',
+        'Рабочий набор': 'Рабочий набор',
+        'clashName': 'Наименование конфликта',
+        'status': 'Статус',
+        'name': 'Имя коллизии',
+        'testName': 'Проверка'
+      };
+
+      function makeOptions(set, prefix = '') {
+        return Array.from(set).map(p => ({
+          key: p,
+          label: (prefix ? prefix + ' ' : '') + (labelMap[p] || p)
+        })).sort((a,b) => a.label.localeCompare(b.label, 'ru'));
+      }
+
+      return {
+        item1: makeOptions(props1),
+        item2: makeOptions(props2)
+      };
+    }
+
+    function populatePropertySelectors() {
+      // Populate the "add level" selects for hierarchies
+      const rowAdd = document.getElementById('row-level-add');
+      const colAdd = document.getElementById('col-level-add');
+
+      if (rowAdd) {
+        rowAdd.innerHTML = '<option value="">-- выбрать параметр --</option>';
+        availableProps1.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.key;
+          opt.textContent = p.label || p.key;
+          rowAdd.appendChild(opt);
+        });
+      }
+
+      if (colAdd) {
+        colAdd.innerHTML = '<option value="">-- выбрать параметр --</option>';
+        availableProps2.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.key;
+          opt.textContent = p.label || p.key;
+          colAdd.appendChild(opt);
+        });
+      }
+
+      // Re-render current hierarchies
+      renderHierarchyUI();
+    }
+
+    function renderHierarchyUI() {
+      // Rows
+      const rowContainer = document.getElementById('row-hierarchy');
+      if (rowContainer) {
+        rowContainer.innerHTML = '';
+        rowContainer.ondragover = e => e.preventDefault();
+        rowContainer.ondrop = e => handleHierarchyDrop(e, 'row', rowContainer);
+
+        rowHierarchy.forEach((key, idx) => {
+          const label = availableProps1.find(p => p.key === key)?.label || key;
+          const chip = document.createElement('span');
+          chip.draggable = true;
+          chip.className = 'inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs cursor-move';
+          chip.innerHTML = `
+            <span class="font-medium">${idx+1}. ${label}</span>
+            <button onclick="removeRowLevel(${idx}); event.stopImmediatePropagation();" class="ml-1 text-blue-500 hover:text-red-500">×</button>
+          `;
+          chip.ondragstart = e => {
+            e.dataTransfer.setData('text/plain', JSON.stringify({ side: 'row', index: idx }));
+            chip.style.opacity = '0.4';
+          };
+          chip.ondragend = () => chip.style.opacity = '1';
+          rowContainer.appendChild(chip);
+        });
+        if (rowHierarchy.length === 0) {
+          rowContainer.innerHTML = '<span class="text-slate-400 text-xs">Добавьте уровни иерархии</span>';
+        }
+      }
+
+      // Columns
+      const colContainer = document.getElementById('col-hierarchy');
+      if (colContainer) {
+        colContainer.innerHTML = '';
+        colContainer.ondragover = e => e.preventDefault();
+        colContainer.ondrop = e => handleHierarchyDrop(e, 'col', colContainer);
+
+        colHierarchy.forEach((key, idx) => {
+          const label = availableProps2.find(p => p.key === key)?.label || key;
+          const chip = document.createElement('span');
+          chip.draggable = true;
+          chip.className = 'inline-flex items-center gap-1 bg-red-100 text-red-800 px-2 py-0.5 rounded text-xs cursor-move';
+          chip.innerHTML = `
+            <span class="font-medium">${idx+1}. ${label}</span>
+            <button onclick="removeColLevel(${idx}); event.stopImmediatePropagation();" class="ml-1 text-red-500 hover:text-red-500">×</button>
+          `;
+          chip.ondragstart = e => {
+            e.dataTransfer.setData('text/plain', JSON.stringify({ side: 'col', index: idx }));
+            chip.style.opacity = '0.4';
+          };
+          chip.ondragend = () => chip.style.opacity = '1';
+          colContainer.appendChild(chip);
+        });
+        if (colHierarchy.length === 0) {
+          colContainer.innerHTML = '<span class="text-slate-400 text-xs">Добавьте уровни иерархии</span>';
+        }
+      }
+    }
+
+    function handleHierarchyDrop(e, targetSide, container) {
+      e.preventDefault();
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      if (data.side !== targetSide) return;
+
+      const hierarchy = targetSide === 'row' ? rowHierarchy : colHierarchy;
+      const fromIndex = data.index;
+
+      // Find the target index based on drop position
+      const children = Array.from(container.children).filter(c => c.draggable);
+      let toIndex = hierarchy.length;
+
+      for (let i = 0; i < children.length; i++) {
+        const rect = children[i].getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+          toIndex = i;
+          break;
+        }
+      }
+
+      if (fromIndex === toIndex) return;
+
+      const [moved] = hierarchy.splice(fromIndex, 1);
+      hierarchy.splice(toIndex, 0, moved);
+
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+      resetMatrixSort();
+      renderHierarchyUI();
+      buildMatrix();
+    }
+
+    function addRowLevel() {
+      const sel = document.getElementById('row-level-add');
+      if (sel && sel.value && !rowHierarchy.includes(sel.value)) {
+        recordUndoBeforeChange();
+        deselectActiveProfile();
+        resetMatrixSort();
+        rowHierarchy.push(sel.value);
+        renderHierarchyUI();
+        buildMatrix();
+      }
+    }
+
+    function addColLevel() {
+      const sel = document.getElementById('col-level-add');
+      if (sel && sel.value && !colHierarchy.includes(sel.value)) {
+        recordUndoBeforeChange();
+        deselectActiveProfile();
+        resetMatrixSort();
+        colHierarchy.push(sel.value);
+        renderHierarchyUI();
+        buildMatrix();
+      }
+    }
+
+    function removeRowLevel(idx) {
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+      resetMatrixSort();
+      rowHierarchy.splice(idx, 1);
+      renderHierarchyUI();
+      buildMatrix();
+    }
+
+    function removeColLevel(idx) {
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+      resetMatrixSort();
+      colHierarchy.splice(idx, 1);
+      renderHierarchyUI();
+      buildMatrix();
+    }
+
+    function clearRowHierarchy() {
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+      resetMatrixSort();
+      rowHierarchy = [];
+      renderHierarchyUI();
+      buildMatrix();
+    }
+
+    function clearColHierarchy() {
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+      resetMatrixSort();
+      colHierarchy = [];
+      renderHierarchyUI();
+      buildMatrix();
+    }
+
+    // ==================== NEW FILTER SYSTEM ====================
+
+    function getClashStatus(clash) {
+      return (clash.status || '').trim() || '(без статуса)';
+    }
+
+    function collectUniqueStatuses(sourceClashes) {
+      return [...new Set(sourceClashes.map(getClashStatus))].sort((a, b) => a.localeCompare(b, 'ru'));
+    }
+
+    function selectAllTests() {
+      if (uniqueTests.length <= 1) return;
+      activeTestFilters = [...uniqueTests];
+      renderTestFilters();
+      debouncedRebuild();
+    }
+
+    function deselectAllTests() {
+      if (uniqueTests.length <= 1) return;
+      activeTestFilters = [];
+      renderTestFilters();
+      debouncedRebuild();
+    }
+
+    function renderTestFilters() {
+      const container = document.getElementById('test-filters');
+      const actions = document.getElementById('test-filters-actions');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (uniqueTests.length <= 1) {
+        if (actions) actions.classList.add('hidden');
+        container.innerHTML = '<span class="text-slate-400">Только одна проверка</span>';
+        activeTestFilters = [...uniqueTests];
+        return;
+      }
+
+      if (actions) actions.classList.remove('hidden');
+
+      uniqueTests.forEach(test => {
+        const checked = activeTestFilters.includes(test);
+        const id = 'test-' + test.replace(/\s+/g, '-');
+
+        const label = document.createElement('label');
+        label.className = 'flex items-center gap-1.5 cursor-pointer px-2 py-0.5 bg-white border rounded hover:bg-slate-50';
+        label.innerHTML = `
+          <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="accent-violet-600">
+          <span class="truncate max-w-[160px]">${test}</span>
+        `;
+
+        const cb = label.querySelector('input');
+        cb.onchange = () => {
+          if (cb.checked) {
+            if (!activeTestFilters.includes(test)) activeTestFilters.push(test);
+          } else {
+            activeTestFilters = activeTestFilters.filter(t => t !== test);
+          }
+          debouncedRebuild();
+        };
+
+        container.appendChild(label);
+      });
+    }
+
+    function selectAllStatuses() {
+      if (uniqueStatuses.length <= 1) return;
+      activeStatusFilters = [...uniqueStatuses];
+      renderStatusFilters();
+      debouncedRebuild();
+    }
+
+    function deselectAllStatuses() {
+      if (uniqueStatuses.length <= 1) return;
+      activeStatusFilters = [];
+      renderStatusFilters();
+      debouncedRebuild();
+    }
+
+    function renderStatusFilters() {
+      const container = document.getElementById('status-filters');
+      const actions = document.getElementById('status-filters-actions');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (uniqueStatuses.length <= 1) {
+        if (actions) actions.classList.add('hidden');
+        const onlyStatus = uniqueStatuses[0] || '—';
+        container.innerHTML = `<span class="text-slate-400">Только один статус: ${onlyStatus}</span>`;
+        activeStatusFilters = [...uniqueStatuses];
+        return;
+      }
+
+      if (actions) actions.classList.remove('hidden');
+
+      uniqueStatuses.forEach((status, idx) => {
+        const checked = activeStatusFilters.includes(status);
+        const id = 'status-' + idx + '-' + status.replace(/[^a-zA-Z0-9\u0400-\u04FF]+/g, '-');
+
+        const label = document.createElement('label');
+        label.className = 'flex items-center gap-1.5 cursor-pointer px-2 py-0.5 bg-white border rounded hover:bg-slate-50';
+        label.innerHTML = `
+          <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="accent-violet-600">
+          <span class="truncate max-w-[160px]" title="${status}">${status}</span>
+        `;
+
+        const cb = label.querySelector('input');
+        cb.onchange = () => {
+          if (cb.checked) {
+            if (!activeStatusFilters.includes(status)) activeStatusFilters.push(status);
+          } else {
+            activeStatusFilters = activeStatusFilters.filter(s => s !== status);
+          }
+          debouncedRebuild();
+        };
+
+        container.appendChild(label);
+      });
+    }
+
+    function addPropertyFilterRow(initial = null) {
+      const container = document.getElementById('property-filter-rows');
+      if (!container) return;
+
+      const allProps = getAllFilterableProps();
+      const id = 'pf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+
+      const row = document.createElement('div');
+      row.className = 'flex gap-2 items-center bg-slate-50 p-1.5 rounded border';
+      row.dataset.filterId = id;
+
+      let propOptions = allProps.map(p => `<option value="${p}">${p}</option>`).join('');
+
+      row.innerHTML = `
+        <select class="filter-prop border border-slate-300 rounded px-2 py-1 text-xs w-44">
+          ${propOptions}
+        </select>
+        <select class="filter-side border border-slate-300 rounded px-2 py-1 text-xs">
+          <option value="both">Оба элемента</option>
+          <option value="item1">Только Элемент 1 (A)</option>
+          <option value="item2">Только Элемент 2 (B)</option>
+        </select>
+        <select class="filter-op border border-slate-300 rounded px-2 py-1 text-xs">
+          <option value="contains">содержит</option>
+          <option value="not-contains">не содержит</option>
+          <option value="equals">равно</option>
+          <option value="not-equals">не равно</option>
+          <option value="starts-with">начинается с</option>
+        </select>
+        <input type="text" class="filter-value border border-slate-300 rounded px-2 py-1 text-xs flex-1" placeholder="Значение">
+        <button class="remove-filter text-red-500 hover:text-red-700 px-1">✕</button>
+      `;
+
+      if (initial) {
+        const propEl = row.querySelector('.filter-prop');
+        const sideEl = row.querySelector('.filter-side');
+        const opEl = row.querySelector('.filter-op');
+        const valEl = row.querySelector('.filter-value');
+
+        if (initial.prop && allProps.includes(initial.prop)) {
+          propEl.value = initial.prop;
+        } else if (initial.prop) {
+          const opt = document.createElement('option');
+          opt.value = initial.prop;
+          opt.textContent = initial.prop + ' (недоступно)';
+          propEl.appendChild(opt);
+          propEl.value = initial.prop;
+        }
+
+        if (sideEl && initial.side) sideEl.value = initial.side;
+        if (opEl && initial.operator) opEl.value = initial.operator;
+        if (valEl && initial.value != null) valEl.value = initial.value;
+      }
+
+      const removeBtn = row.querySelector('.remove-filter');
+      removeBtn.onclick = () => {
+        row.remove();
+        updatePropertyFiltersFromDOM();
+        debouncedRebuild();
+      };
+
+      const inputs = row.querySelectorAll('select, input');
+      inputs.forEach(inp => {
+        inp.onchange = inp.oninput = () => {
+          updatePropertyFiltersFromDOM();
+          debouncedRebuild();
+        };
+      });
+
+      container.appendChild(row);
+      updatePropertyFiltersFromDOM();
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+    }
+
+    function restorePropertyFilterRows(filters) {
+      clearPropertyFilterRows();
+      (filters || []).forEach(f => addPropertyFilterRow(f));
+    }
+
+    function updatePropertyFiltersFromDOM() {
+      const container = document.getElementById('property-filter-rows');
+      if (!container) return;
+
+      propertyFilters = [];
+      Array.from(container.children).forEach(row => {
+        const id = row.dataset.filterId;
+        const prop = row.querySelector('.filter-prop')?.value;
+        const sideEl = row.querySelector('.filter-side');
+        const side = sideEl ? sideEl.value : 'both';
+        const op = row.querySelector('.filter-op')?.value;
+        const val = row.querySelector('.filter-value')?.value || '';
+        if (prop) {
+          propertyFilters.push({ id, prop, side, operator: op, value: val });
+        }
+      });
+    }
+
+    function clearPropertyFilterRows() {
+      const container = document.getElementById('property-filter-rows');
+      if (container) container.innerHTML = '';
+      propertyFilters = [];
+    }
+
+    function getAllFilterableProps() {
+      const set = new Set();
+      // from matrix properties
+      availableProps1.forEach(p => set.add(p.key));
+      availableProps2.forEach(p => set.add(p.key));
+      set.add('testName');
+      set.add('status');
+      set.add('distance');
+      return Array.from(set).sort((a,b) => a.localeCompare(b, 'ru'));
+    }
+
+    function matchesCustomFilter(clash, f) {
+      if (!f.prop || !f.value) return true;
+
+      const side = f.side || 'both';
+      const needle = String(f.value).toLowerCase().trim();
+
+      // Special properties that are not per-element
+      const isSpecial = ['testName', 'status', 'distance'].includes(f.prop);
+      if (isSpecial) {
+        let val;
+        if (f.prop === 'testName') val = clash.testName;
+        else if (f.prop === 'status') val = clash.status;
+        else if (f.prop === 'distance') val = String(clash.distance);
+        else return true;
+
+        const v = String(val || '').toLowerCase().trim();
+
+        switch (f.operator) {
+          case 'equals': return v === needle;
+          case 'not-equals': return v !== needle;
+          case 'starts-with': return v.startsWith(needle);
+          case 'contains': return v.includes(needle);
+          case 'not-contains': return !v.includes(needle);
+          default: return v.includes(needle);
+        }
+      }
+
+      // Regular per-element properties
+      const check = (item) => {
+        const has = item && item[f.prop] != null;
+        const v = has ? String(item[f.prop]).toLowerCase().trim() : '';
+
+        const isNegative = ['not-contains', 'not-equals'].includes(f.operator);
+
+        if (!has) {
+          // missing property: positive operators → false, negative → true (doesn't have the forbidden value)
+          return isNegative;
+        }
+
+        switch (f.operator) {
+          case 'equals': return v === needle;
+          case 'not-equals': return v !== needle;
+          case 'starts-with': return v.startsWith(needle);
+          case 'contains': return v.includes(needle);
+          case 'not-contains': return !v.includes(needle);
+          default: return v.includes(needle);
+        }
+      };
+
+      if (side === 'item1') {
+        return check(clash.item1);
+      } else if (side === 'item2') {
+        return check(clash.item2);
+      } else {
+        // both
+        const c1 = check(clash.item1);
+        const c2 = check(clash.item2);
+        const isNegative = ['not-contains', 'not-equals'].includes(f.operator);
+        return isNegative ? (c1 && c2) : (c1 || c2);
+      }
+    }
+
+    function applyAllFilters(sourceClashes) {
+      let filtered = sourceClashes;
+
+      // 1. Test filter
+      if (uniqueTests.length > 1) {
+        if (activeTestFilters.length === 0) {
+          filtered = [];
+        } else if (activeTestFilters.length < uniqueTests.length) {
+          filtered = filtered.filter(c => activeTestFilters.includes(c.testName));
+        }
+      }
+
+      // 2. Status filter
+      if (uniqueStatuses.length > 1) {
+        if (activeStatusFilters.length === 0) {
+          filtered = [];
+        } else if (activeStatusFilters.length < uniqueStatuses.length) {
+          filtered = filtered.filter(c => activeStatusFilters.includes(getClashStatus(c)));
+        }
+      }
+
+      // 3. Global search
+      const searchInput = document.getElementById('global-search');
+      const term = searchInput ? searchInput.value.trim().toLowerCase() : '';
+      if (term) {
+        filtered = filtered.filter(c => {
+          const haystack = [
+            c.testName, c.status, c.name, c.description,
+            String(c.distance || ''),
+            ...Object.values(c.item1 || {}),
+            ...Object.values(c.item2 || {})
+          ].filter(Boolean).join(' ').toLowerCase();
+          return haystack.includes(term);
+        });
+      }
+
+      // 4. Custom property filters
+      if (propertyFilters.length > 0) {
+        filtered = filtered.filter(c => {
+          return propertyFilters.every(f => matchesCustomFilter(c, f));
+        });
+      }
+
+      return filtered;
+    }
+
+    function debouncedRebuild() {
+      recordUndoDebounced();
+      deselectActiveProfile();
+      if (filterTimeout) clearTimeout(filterTimeout);
+      filterTimeout = setTimeout(() => {
+        buildMatrix();
+      }, 250);
+    }
+
+    function clearAllFilters() {
+      recordUndoBeforeChange();
+      deselectActiveProfile();
+      resetMatrixSort();
+      activeTestFilters = [...uniqueTests];
+      activeStatusFilters = [...uniqueStatuses];
+
+      const search = document.getElementById('global-search');
+      if (search) search.value = '';
+
+      clearPropertyFilterRows();
+      propertyFilters = [];
+
+      renderTestFilters();
+      renderStatusFilters();
+      buildMatrix();
+    }
+
+    // ==================== END FILTER SYSTEM ====================
+
+    function buildMatrix() {
+      try {
+        if (!clashes || !clashes.length) {
+          alert('Нет загруженных коллизий');
+          return;
+        }
+
+        const filtered = applyAllFilters(clashes);
+
+        if (filtered.length === 0) {
+          const container = document.getElementById('matrix-container');
+          container.innerHTML = '<div class="p-6 text-center text-orange-600 bg-orange-50 rounded-xl">После фильтра не осталось коллизий.</div>';
+          document.getElementById('stats').innerHTML = '0 коллизий после фильтра';
+          return;
+        }
+
+        if (rowHierarchy.length === 0 && colHierarchy.length === 0) {
+          const container = document.getElementById('matrix-container');
+          container.innerHTML = '<div class="p-4 text-amber-600">Добавьте хотя бы один уровень в иерархию строк или столбцов.</div>';
+          return;
+        }
+
+        // Build hierarchical data
+        const { rowGroups, colGroups, leafMatrix, total } = buildHierarchicalData(filtered, rowHierarchy, colHierarchy);
+
+        lastMatrixData = {
+          rowGroups,
+          colGroups,
+          leafMatrix,
+          total,
+          rowLevels: [...rowHierarchy],
+          colLevels: [...colHierarchy]
+        };
+
+        // Render hierarchical table
+        renderHierarchicalMatrix(rowGroups, colGroups, leafMatrix, total, rowHierarchy, colHierarchy);
+
+        // Update title
+        const rowDisplay = rowHierarchy.length ? rowHierarchy.map(labelFor).join(' > ') : 'Итого';
+        const colDisplay = colHierarchy.length ? colHierarchy.map(labelFor).join(' > ') : 'Итого';
+        document.getElementById('matrix-title').textContent = 
+          `Rows: ${rowDisplay} × Cols: ${colDisplay}`;
+      } catch (e) {
+        console.error('buildMatrix error:', e);
+        const container = document.getElementById('matrix-container');
+        container.innerHTML = `<div class="p-4 text-red-600">Ошибка при построении матрицы: ${e.message}</div>`;
+      }
+    }
+
+    function makeMatrixKey(rowPath, colPath, hasRows, hasCols) {
+      const rKey = hasRows ? rowPath.join('||') : '';
+      const cKey = hasCols ? colPath.join('||') : '';
+      return rKey + '||' + cKey;
+    }
+
+    function parseMatrixKey(key, rowLen, colLen) {
+      if (rowLen === 0 && colLen === 0) return { rowVals: [], colVals: [] };
+      const parts = key.split('||');
+      if (rowLen === 0) return { rowVals: [], colVals: parts.slice(1) };
+      if (colLen === 0) return { rowVals: parts.slice(0, rowLen), colVals: [] };
+      return { rowVals: parts.slice(0, rowLen), colVals: parts.slice(rowLen, rowLen + colLen) };
+    }
+
+    function getLeafPaths(groups, levelsLen) {
+      if (!levelsLen) return [[]];
+      return groups
+        .filter(g => !g.hasChildren || g.depth === levelsLen - 1)
+        .map(g => g.fullPath || [g.key]);
+    }
+
+    let lastMatrixData = null;
+    let matrixSort = {
+      rows: { key: null, direction: null, mode: 'default', level: null, colIndex: null },
+      cols: { key: null, direction: null, mode: 'default', level: null, colIndex: null }
+    };
+
+    const HISTORY_MAX = 30;
+    let undoStack = [];
+    let redoStack = [];
+    let suppressHistory = false;
+    let undoDebounceBaseline = null;
+    let undoDebounceTimer = null;
+
+    function getDefaultMatrixSort() {
+      return {
+        rows: { key: null, direction: null, mode: 'default', level: null, colIndex: null },
+        cols: { key: null, direction: null, mode: 'default', level: null, colIndex: null }
+      };
+    }
+
+    function clearHistory() {
+      undoStack = [];
+      redoStack = [];
+      undoDebounceBaseline = null;
+      if (undoDebounceTimer) {
+        clearTimeout(undoDebounceTimer);
+        undoDebounceTimer = null;
+      }
+      updateHistoryButtons();
+    }
+
+    function captureAppState() {
+      updatePropertyFiltersFromDOM();
+      const search = document.getElementById('global-search');
+      return JSON.stringify({
+        rowHierarchy: [...rowHierarchy],
+        colHierarchy: [...colHierarchy],
+        activeTestFilters: [...activeTestFilters],
+        activeStatusFilters: [...activeStatusFilters],
+        propertyFilters: propertyFilters.map(({ prop, side, operator, value }) => ({
+          prop,
+          side: side || 'both',
+          operator: operator || 'contains',
+          value: value || ''
+        })),
+        globalSearch: search ? search.value : '',
+        mirrorMode,
+        matrixSort: JSON.parse(JSON.stringify(matrixSort)),
+        activeProfileId
+      });
+    }
+
+    function applyAppState(snapshot) {
+      const state = typeof snapshot === 'string' ? JSON.parse(snapshot) : snapshot;
+      suppressHistory = true;
+      suppressProfileDeselect = true;
+      try {
+        rowHierarchy = [...(state.rowHierarchy || [])];
+        colHierarchy = [...(state.colHierarchy || [])];
+        activeTestFilters = [...(state.activeTestFilters || [])];
+        activeStatusFilters = [...(state.activeStatusFilters || [])];
+
+        const search = document.getElementById('global-search');
+        if (search) search.value = state.globalSearch || '';
+
+        mirrorMode = !!state.mirrorMode;
+        matrixSort = state.matrixSort
+          ? JSON.parse(JSON.stringify(state.matrixSort))
+          : getDefaultMatrixSort();
+        activeProfileId = state.activeProfileId || null;
+
+        rebuildClashes();
+        restorePropertyFilterRows(state.propertyFilters || []);
+        renderHierarchyUI();
+        renderTestFilters();
+        renderStatusFilters();
+        renderProfileSelector();
+        updateClashCountDisplay();
+        updateMirrorModeUI();
+        buildMatrix();
+      } finally {
+        suppressProfileDeselect = false;
+        suppressHistory = false;
+      }
+      updateHistoryButtons();
+    }
+
+    function updateHistoryButtons() {
+      const undoBtn = document.getElementById('undo-btn');
+      const redoBtn = document.getElementById('redo-btn');
+      const hasData = rawClashes.length > 0;
+      if (undoBtn) undoBtn.disabled = !hasData || undoStack.length === 0;
+      if (redoBtn) redoBtn.disabled = !hasData || redoStack.length === 0;
+    }
+
+    function recordUndoBeforeChange() {
+      if (suppressHistory || !rawClashes.length) return;
+      const snap = captureAppState();
+      if (undoStack.length && undoStack[undoStack.length - 1] === snap) return;
+      undoStack.push(snap);
+      if (undoStack.length > HISTORY_MAX) undoStack.shift();
+      redoStack = [];
+      updateHistoryButtons();
+    }
+
+    function recordUndoDebounced() {
+      if (suppressHistory || !rawClashes.length) return;
+      if (!undoDebounceBaseline) undoDebounceBaseline = captureAppState();
+      if (undoDebounceTimer) clearTimeout(undoDebounceTimer);
+      undoDebounceTimer = setTimeout(() => {
+        const baseline = undoDebounceBaseline;
+        undoDebounceBaseline = null;
+        undoDebounceTimer = null;
+        const current = captureAppState();
+        if (baseline !== current) {
+          if (!undoStack.length || undoStack[undoStack.length - 1] !== baseline) {
+            undoStack.push(baseline);
+            if (undoStack.length > HISTORY_MAX) undoStack.shift();
+            redoStack = [];
+            updateHistoryButtons();
+          }
+        }
+      }, 300);
+    }
+
+    function undoChange() {
+      if (!undoStack.length || !rawClashes.length) return;
+      suppressHistory = true;
+      try {
+        redoStack.push(captureAppState());
+        const prev = undoStack.pop();
+        applyAppState(prev);
+      } finally {
+        suppressHistory = false;
+      }
+      updateHistoryButtons();
+    }
+
+    function redoChange() {
+      if (!redoStack.length || !rawClashes.length) return;
+      suppressHistory = true;
+      try {
+        undoStack.push(captureAppState());
+        const next = redoStack.pop();
+        applyAppState(next);
+      } finally {
+        suppressHistory = false;
+      }
+      updateHistoryButtons();
+    }
+
+    function resetMatrixSort() {
+      matrixSort = {
+        rows: { key: null, direction: null, mode: 'default', level: null, colIndex: null },
+        cols: { key: null, direction: null, mode: 'default', level: null, colIndex: null }
+      };
+    }
+
+    function resetMatrixSortSide(side) {
+      matrixSort[side] = { key: null, direction: null, mode: 'default', level: null, colIndex: null };
+    }
+
+    function pathToKey(path) {
+      return (path || []).join('||');
+    }
+
+    function sortMatrixPaths(paths) {
+      return [...paths].sort((a, b) => comparePathsAlpha(a, b, -1, 'asc'));
+    }
+
+    function comparePathsAlpha(a, b, primaryLevel, dir) {
+      const d = dir === 'desc' ? -1 : 1;
+      const lv = primaryLevel != null && primaryLevel >= 0 ? primaryLevel : -1;
+
+      if (lv >= 0) {
+        const cmp = (a[lv] || '').localeCompare(b[lv] || '', 'ru');
+        if (cmp !== 0) return cmp * d;
+      }
+
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if (i === lv) continue;
+        const t = (a[i] || '').localeCompare(b[i] || '', 'ru');
+        if (t !== 0) return t;
+      }
+      return 0;
+    }
+
+    function computeRowTotals(rowPaths, colPaths, leafMatrix, hasRows, hasCols) {
+      const totals = new Map();
+      rowPaths.forEach(rowPath => {
+        let sum = 0;
+        colPaths.forEach(colPath => {
+          sum += leafMatrix.get(makeMatrixKey(rowPath, colPath, hasRows, hasCols)) || 0;
+        });
+        totals.set(pathToKey(rowPath), sum);
+      });
+      return totals;
+    }
+
+    function computeColTotals(colPaths, rowPaths, leafMatrix, hasRows, hasCols) {
+      const totals = new Map();
+      colPaths.forEach(colPath => {
+        let sum = 0;
+        rowPaths.forEach(rowPath => {
+          sum += leafMatrix.get(makeMatrixKey(rowPath, colPath, hasRows, hasCols)) || 0;
+        });
+        totals.set(pathToKey(colPath), sum);
+      });
+      return totals;
+    }
+
+    function sortMatrixPathsWithConfig(paths, sortCfg, context) {
+      if (!sortCfg || sortCfg.mode === 'default' || !sortCfg.key || !sortCfg.direction) {
+        return sortMatrixPaths(paths);
+      }
+
+      const dir = sortCfg.direction;
+
+      if (sortCfg.mode === 'alpha') {
+        const level = sortCfg.level ?? 0;
+        return [...paths].sort((a, b) => comparePathsAlpha(a, b, level, dir));
+      }
+
+      if (sortCfg.mode === 'total') {
+        const totals = context.computeTotals(paths);
+        const d = dir === 'desc' ? -1 : 1;
+        return [...paths].sort((a, b) => {
+          const ta = totals.get(pathToKey(a)) || 0;
+          const tb = totals.get(pathToKey(b)) || 0;
+          if (ta !== tb) return (ta - tb) * d;
+          return comparePathsAlpha(a, b, -1, 'asc');
+        });
+      }
+
+      if (sortCfg.mode === 'column') {
+        const colPath = context.colPaths[sortCfg.colIndex];
+        if (!colPath) return sortMatrixPaths(paths);
+        const { leafMatrix, hasRows, hasCols } = context;
+        const d = dir === 'desc' ? -1 : 1;
+        return [...paths].sort((a, b) => {
+          const ca = leafMatrix.get(makeMatrixKey(a, colPath, hasRows, hasCols)) || 0;
+          const cb = leafMatrix.get(makeMatrixKey(b, colPath, hasRows, hasCols)) || 0;
+          if (ca !== cb) return (ca - cb) * d;
+          return comparePathsAlpha(a, b, -1, 'asc');
+        });
+      }
+
+      return sortMatrixPaths(paths);
+    }
+
+    function cycleMatrixSort(side, key, mode, extra = {}) {
+      recordUndoBeforeChange();
+      const cfg = matrixSort[side];
+      if (cfg.key === key && cfg.mode === mode) {
+        if (cfg.direction === 'asc') {
+          matrixSort[side] = { ...cfg, direction: 'desc' };
+        } else {
+          resetMatrixSortSide(side);
+        }
+      } else {
+        matrixSort[side] = {
+          key,
+          direction: 'asc',
+          mode,
+          level: extra.level ?? null,
+          colIndex: extra.colIndex ?? null
+        };
+      }
+      rerenderMatrixFromCache();
+    }
+
+    function rerenderMatrixFromCache() {
+      if (!lastMatrixData) return;
+      const { rowGroups, colGroups, leafMatrix, total, rowLevels, colLevels } = lastMatrixData;
+      renderHierarchicalMatrix(rowGroups, colGroups, leafMatrix, total, rowLevels, colLevels);
+    }
+
+    function formatSortLabel(label, side, key, mode) {
+      const cfg = matrixSort[side];
+      if (cfg.key === key && cfg.mode === mode && cfg.direction) {
+        return label + (cfg.direction === 'desc' ? ' ↓' : ' ↑');
+      }
+      return label;
+    }
+
+    function isSortActive(side, key, mode) {
+      const cfg = matrixSort[side];
+      return cfg.key === key && cfg.mode === mode && !!cfg.direction;
+    }
+
+    function attachSortableHeader(th, { side, key, mode, level, colIndex, label, title }) {
+      th.classList.add('matrix-sortable');
+      th.textContent = formatSortLabel(label, side, key, mode);
+      if (isSortActive(side, key, mode)) th.classList.add('matrix-sort-active');
+      th.title = (title || label) + ' · Клик: сортировка (А→Я → Я→А → сброс)';
+      th.onclick = (e) => {
+        e.stopPropagation();
+        cycleMatrixSort(side, key, mode, { level, colIndex });
+      };
+    }
+
+    function buildHierarchicalData(clashes, rowLevels, colLevels) {
+      const hasRows = rowLevels.length > 0;
+      const hasCols = colLevels.length > 0;
+      const leafMatrix = new Map();
+      const rowGroupMap = new Map();
+      const colGroupMap = new Map();
+
+      const getPathKey = (clash, side, levels) => levels.map(l => {
+        if (l === 'testName') return clash.testName || '(пусто)';
+        const item = side === 'row' ? clash.item1 : clash.item2;
+        return (item && item[l] != null ? String(item[l]).trim() : '(пусто)');
+      });
+
+      clashes.forEach(c => {
+        const rowPath = hasRows ? getPathKey(c, 'row', rowLevels) : [];
+        const colPath = hasCols ? getPathKey(c, 'col', colLevels) : [];
+        const fullKey = makeMatrixKey(rowPath, colPath, hasRows, hasCols);
+
+        leafMatrix.set(fullKey, (leafMatrix.get(fullKey) || 0) + 1);
+
+        if (hasRows) addToGroupTree(rowGroupMap, rowPath, c);
+        if (hasCols) addToGroupTree(colGroupMap, colPath, c);
+      });
+
+      const rowGroups = hasRows ? flattenGroupTree(rowGroupMap, rowLevels.length) : [];
+      const colGroups = hasCols ? flattenGroupTree(colGroupMap, colLevels.length) : [];
+      const total = clashes.length;
+
+      return { rowGroups, colGroups, leafMatrix, total };
+    }
+
+    function addToGroupTree(tree, path, clash) {
+      let current = tree;
+      path.forEach((val, depth) => {
+        if (!current.has(val)) {
+          current.set(val, { children: new Map(), count: 0, path: path.slice(0, depth+1) });
+        }
+        const node = current.get(val);
+        node.count++;
+        current = node.children;
+      });
+    }
+
+    function flattenGroupTree(tree, maxDepth) {
+      const result = [];
+      function traverse(map, depth, parentPath) {
+        const sortedKeys = Array.from(map.keys()).sort((a,b) => a.localeCompare(b,'ru'));
+        sortedKeys.forEach(key => {
+          const node = map.get(key);
+          const fullPath = [...parentPath, key];
+          result.push({
+            key,
+            depth,
+            fullPath: fullPath,
+            count: node.count,
+            hasChildren: node.children.size > 0
+          });
+          if (node.children.size > 0) {
+            traverse(node.children, depth + 1, fullPath);
+          }
+        });
+      }
+      traverse(tree, 0, []);
+      return result;
+    }
+
+    function labelFor(key) {
+      const map = {
+        level: 'Уровень',
+        name: 'Имя',
+        category: 'Файл',
+        workset: 'Рабочий набор',
+        model: 'Модель',
+        type: 'Тип',
+        id: 'ID элемента',
+        path: 'Путь',
+        clashName: 'Наименование конфликта',
+        status: 'Статус',
+        testName: 'Проверка'
+      };
+      return map[key] || key;
+    }
+
+    function renderHierarchicalMatrix(rowGroups, colGroups, leafMatrix, total, rowLevels, colLevels) {
+      const container = document.getElementById('matrix-container');
+      container.innerHTML = '';
+      container.style.overflow = 'auto';
+      container.style.maxHeight = '620px';
+      container.style.position = 'relative';
+      container.style.border = '1px solid #cbd5e1';
+      container.style.background = 'white';
+
+      const hasRows = rowLevels.length > 0;
+      const hasCols = colLevels.length > 0;
+      const numRowLvls = rowLevels.length;
+      const numColLvls = colLevels.length;
+
+      const rawRowPaths = getLeafPaths(rowGroups, numRowLvls);
+      const rawColPaths = getLeafPaths(colGroups, numColLvls);
+
+      const allColPaths = sortMatrixPathsWithConfig(rawColPaths, matrixSort.cols, {
+        leafMatrix,
+        hasRows,
+        hasCols,
+        colPaths: rawColPaths,
+        computeTotals: (paths) => computeColTotals(paths, rawRowPaths, leafMatrix, hasRows, hasCols)
+      });
+
+      const allRowPaths = sortMatrixPathsWithConfig(rawRowPaths, matrixSort.rows, {
+        leafMatrix,
+        hasRows,
+        hasCols,
+        colPaths: allColPaths,
+        computeTotals: (paths) => computeRowTotals(paths, allColPaths, leafMatrix, hasRows, hasCols)
+      });
+
+      if ((hasRows && !allRowPaths.length) || (hasCols && !allColPaths.length)) {
+        container.innerHTML = '<div class="p-4 text-center text-slate-500">Нет данных для матрицы.</div>';
+        return;
+      }
+
+      const useTwoColHeaderRows = hasCols && numColLvls >= 2;
+      const showRowTotalColumn = hasCols;
+
+      const table = document.createElement('table');
+      table.className = 'matrix-table text-sm border border-slate-300 w-full';
+      table.style.borderCollapse = 'separate';
+      table.style.borderSpacing = '0';
+
+      const thead = document.createElement('thead');
+      const tr1 = document.createElement('tr');
+      tr1.style.position = 'sticky';
+      tr1.style.top = '0';
+      tr1.style.zIndex = '20';
+      tr1.style.backgroundColor = '#fff';
+
+      if (hasRows) {
+        rowLevels.forEach((lvl, i) => {
+          const th = document.createElement('th');
+          th.className = 'bg-blue-100 text-left p-1 text-xs font-semibold border';
+          th.style.position = 'sticky';
+          th.style.left = (i * 105) + 'px';
+          th.style.zIndex = '25';
+          if (useTwoColHeaderRows) th.rowSpan = 2;
+          attachSortableHeader(th, {
+            side: 'rows',
+            key: 'level:' + i,
+            mode: 'alpha',
+            level: i,
+            label: labelFor(lvl),
+            title: 'Сортировка строк по «' + labelFor(lvl) + '»'
+          });
+          tr1.appendChild(th);
+        });
+      } else {
+        const th = document.createElement('th');
+        th.className = 'bg-blue-100 text-left p-1 text-xs font-semibold border';
+        th.textContent = 'Итого';
+        th.style.position = 'sticky';
+        th.style.left = '0';
+        th.style.zIndex = '25';
+        if (useTwoColHeaderRows) th.rowSpan = 2;
+        tr1.appendChild(th);
+      }
+
+      if (hasCols) {
+        if (!useTwoColHeaderRows) {
+          allColPaths.forEach((path, colIdx) => {
+            const th = document.createElement('th');
+            th.className = 'bg-red-100 text-center p-1 text-xs font-semibold border matrix-col-header-vertical';
+            attachSortableHeader(th, {
+              side: 'rows',
+              key: 'col:' + colIdx,
+              mode: 'column',
+              colIndex: colIdx,
+              label: path[0] || '',
+              title: 'Сортировка строк по столбцу «' + (path.join(' > ') || path[0]) + '»'
+            });
+            th.onclick = (e) => {
+              if (e.ctrlKey) {
+                e.stopPropagation();
+                cycleMatrixSort('cols', 'level:0', 'alpha', { level: 0 });
+                return;
+              }
+              e.stopPropagation();
+              cycleMatrixSort('rows', 'col:' + colIdx, 'column', { colIndex: colIdx });
+            };
+            th.title += ' · Ctrl+клик: сортировка столбцов А→Я';
+            tr1.appendChild(th);
+          });
+        } else {
+          const g1 = new Map();
+          allColPaths.forEach(p => {
+            const k = p[0] || '';
+            g1.set(k, (g1.get(k) || 0) + 1);
+          });
+          g1.forEach((c, k) => {
+            const th = document.createElement('th');
+            th.colSpan = c;
+            th.className = 'bg-red-100 text-center p-1 text-xs font-semibold border matrix-col-header-vertical';
+            attachSortableHeader(th, {
+              side: 'cols',
+              key: 'level:0',
+              mode: 'alpha',
+              level: 0,
+              label: colLevels[0] + ': ' + k,
+              title: 'Сортировка столбцов по «' + labelFor(colLevels[0]) + '»'
+            });
+            tr1.appendChild(th);
+          });
+        }
+      } else {
+        const th = document.createElement('th');
+        th.className = 'bg-red-100 text-center p-1 text-xs font-semibold border';
+        if (useTwoColHeaderRows) th.rowSpan = 2;
+        if (hasRows) {
+          attachSortableHeader(th, {
+            side: 'rows',
+            key: 'total',
+            mode: 'total',
+            label: 'Итого',
+            title: 'Сортировка строк по количеству коллизий'
+          });
+        } else {
+          th.textContent = 'Итого';
+        }
+        tr1.appendChild(th);
+      }
+
+      if (showRowTotalColumn) {
+        const tot1 = document.createElement('th');
+        tot1.className = 'bg-slate-200 font-bold text-center p-1 text-xs border';
+        if (useTwoColHeaderRows) tot1.rowSpan = 2;
+        attachSortableHeader(tot1, {
+          side: 'rows',
+          key: 'total',
+          mode: 'total',
+          label: 'Итого',
+          title: 'Сортировка строк по сумме коллизий'
+        });
+        tr1.appendChild(tot1);
+      }
+
+      thead.appendChild(tr1);
+
+      if (useTwoColHeaderRows) {
+        const tr2 = document.createElement('tr');
+        tr2.style.position = 'sticky';
+        tr2.style.top = '26px';
+        tr2.style.zIndex = '20';
+        tr2.style.backgroundColor = '#fff';
+
+        allColPaths.forEach((path, colIdx) => {
+          const th = document.createElement('th');
+          th.className = 'bg-red-50 text-center p-0.5 text-[10px] leading-tight border matrix-col-header-vertical';
+          const leafLabel = numColLvls === 2 ? (path[1] || '') : path.slice(1).join(' > ');
+          attachSortableHeader(th, {
+            side: 'rows',
+            key: 'col:' + colIdx,
+            mode: 'column',
+            colIndex: colIdx,
+            label: leafLabel,
+            title: 'Сортировка строк по столбцу «' + path.join(' > ') + '»'
+          });
+          if (numColLvls >= 2) {
+            const prevOnclick = th.onclick;
+            th.onclick = (e) => {
+              if (e.ctrlKey) {
+                e.stopPropagation();
+                cycleMatrixSort('cols', 'level:1', 'alpha', { level: 1 });
+                return;
+              }
+              prevOnclick(e);
+            };
+            th.title += ' · Ctrl+клик: сортировка столбцов по 2-му уровню';
+          }
+          tr2.appendChild(th);
+        });
+
+        thead.appendChild(tr2);
+      }
+
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+
+      allRowPaths.forEach(rowPath => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50';
+
+        if (hasRows) {
+          rowPath.forEach((val, i) => {
+            const td = document.createElement('td');
+            td.className = 'p-1 text-xs border ' + (i === 0 ? 'font-semibold bg-blue-50' : 'bg-blue-50');
+            td.textContent = val;
+            td.style.position = 'sticky';
+            td.style.left = (i * 105) + 'px';
+            td.style.zIndex = '15';
+            td.style.backgroundColor = (i === 0 ? '#dbeafe' : '#eff6ff');
+            tr.appendChild(td);
+          });
+        } else {
+          const td = document.createElement('td');
+          td.className = 'p-1 text-xs border font-semibold bg-blue-50';
+          td.textContent = 'Итого';
+          td.style.position = 'sticky';
+          td.style.left = '0';
+          td.style.zIndex = '15';
+          td.style.backgroundColor = '#dbeafe';
+          tr.appendChild(td);
+        }
+
+        let rowTotal = 0;
+
+        if (hasCols) {
+          allColPaths.forEach(colPath => {
+            const count = leafMatrix.get(makeMatrixKey(rowPath, colPath, hasRows, hasCols)) || 0;
+            rowTotal += count;
+
+            const td = document.createElement('td');
+            td.className = 'text-center p-0.5 text-sm border ' + (count > 0 ? 'bg-amber-50 font-medium' : 'bg-white text-slate-300');
+            td.textContent = count > 0 ? count : '';
+            tr.appendChild(td);
+          });
+        } else {
+          rowTotal = leafMatrix.get(makeMatrixKey(rowPath, [], hasRows, hasCols)) || 0;
+          const td = document.createElement('td');
+          td.className = 'text-center p-0.5 text-sm border ' + (rowTotal > 0 ? 'bg-amber-50 font-medium' : 'bg-white text-slate-300');
+          td.textContent = rowTotal > 0 ? rowTotal : '';
+          tr.appendChild(td);
+        }
+
+        if (showRowTotalColumn) {
+          const totalTd = document.createElement('td');
+          totalTd.className = 'text-center p-1 text-xs font-semibold bg-slate-100 border';
+          totalTd.textContent = rowTotal > 0 ? rowTotal : '';
+          tr.appendChild(totalTd);
+        }
+
+        tbody.appendChild(tr);
+      });
+
+      if (hasRows) {
+        const grandTr = document.createElement('tr');
+        grandTr.className = 'font-bold bg-violet-100';
+
+        rowLevels.forEach((_, i) => {
+          const td = document.createElement('td');
+          td.className = 'p-1 text-xs border';
+          if (i === 0) {
+            td.style.position = 'sticky';
+            td.style.left = '0';
+            td.style.zIndex = '15';
+            td.classList.add('matrix-sortable');
+            td.textContent = formatSortLabel('ИТОГО', 'cols', 'total', 'total');
+            if (isSortActive('cols', 'total', 'total')) td.classList.add('matrix-sort-active');
+            td.title = 'Сортировка столбцов по сумме коллизий · Клик: А→Я → Я→А → сброс';
+            td.onclick = (e) => {
+              e.stopPropagation();
+              cycleMatrixSort('cols', 'total', 'total');
+            };
+          } else {
+            td.textContent = '';
+          }
+          grandTr.appendChild(td);
+        });
+
+        if (hasCols) {
+          allColPaths.forEach(colPath => {
+            let colSum = 0;
+            allRowPaths.forEach(rowPath => {
+              colSum += leafMatrix.get(makeMatrixKey(rowPath, colPath, hasRows, hasCols)) || 0;
+            });
+            const td = document.createElement('td');
+            td.className = 'p-0.5 text-center text-xs border bg-violet-50 font-semibold';
+            td.textContent = colSum > 0 ? colSum : '';
+            grandTr.appendChild(td);
+          });
+        } else {
+          const td = document.createElement('td');
+          td.className = 'p-0.5 text-center text-xs border bg-violet-50 font-semibold';
+          td.textContent = total;
+          grandTr.appendChild(td);
+        }
+
+        if (showRowTotalColumn) {
+          const gTotalTd = document.createElement('td');
+          gTotalTd.className = 'p-1 text-center font-bold border';
+          gTotalTd.textContent = total;
+          grandTr.appendChild(gTotalTd);
+        }
+
+        tbody.appendChild(grandTr);
+      }
+
+      table.appendChild(tbody);
+      container.appendChild(table);
+
+      const rowStats = hasRows ? rowLevels.map(labelFor).join(' → ') : 'Итого';
+      const colStats = hasCols ? colLevels.map(labelFor).join(' → ') : 'Итого';
+      const mirrorNote = mirrorMode
+        ? ` &nbsp;|&nbsp; <span class="text-emerald-600">Отзеркаливание: ${rawClashes.length} → ${clashes.length}</span>`
+        : '';
+      const sortNote = (matrixSort.rows.key || matrixSort.cols.key)
+        ? ' &nbsp;|&nbsp; <span class="text-indigo-600">Сортировка активна</span>'
+        : '';
+      document.getElementById('stats').innerHTML =
+        `Всего: <strong>${total}</strong> коллизий${mirrorNote}${sortNote} &nbsp;|&nbsp; Строки: ${rowStats} &nbsp;|&nbsp; Столбцы: ${colStats}`;
+    }
+
+    // Lightweight cell info (optional, can be removed)
+    function showClashDetails(rowPath, colPath, count) {
+      alert(`Коллизий: ${count}\n\nRow: ${rowPath}\nCol: ${colPath}`);
+    }
+
+    function hideModal() {
+      const modal = document.getElementById('details-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    // ==================== FULLSCREEN MODE FOR MATRIX ====================
+    function toggleMatrixFullscreen() {
+      const section = document.getElementById('matrix-section');
+      if (!section) return;
+
+      // Find the main card that contains header + container
+      const card = section.querySelector('.bg-white.border');
+      if (!card) return;
+
+      const isCurrentlyFullscreen = !!document.fullscreenElement ||
+                                    !!document.webkitFullscreenElement;
+
+      if (!isCurrentlyFullscreen) {
+        // Try native Fullscreen API first
+        if (card.requestFullscreen) {
+          card.requestFullscreen().catch(() => fallbackCssFullscreen(card));
+        } else if (card.webkitRequestFullscreen) {
+          card.webkitRequestFullscreen();
+        } else {
+          fallbackCssFullscreen(card);
+        }
+      } else {
+        // Exit
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else {
+          exitFallbackFullscreen(card);
+        }
+      }
+    }
+
+    function fallbackCssFullscreen(card) {
+      card.classList.add('matrix-fullscreen-fallback');
+      document.body.classList.add('matrix-fs-active');
+
+      // Create floating exit button (for fallback mode)
+      let hint = document.getElementById('fs-exit-hint');
+      if (!hint) {
+        hint = document.createElement('div');
+        hint.id = 'fs-exit-hint';
+        hint.className = 'matrix-fs-exit-hint';
+        hint.innerHTML = `
+          <i class="fa-solid fa-compress"></i>
+          <span>Выйти из полного экрана (Esc)</span>
+        `;
+        hint.onclick = () => exitFallbackFullscreen(card);
+        document.body.appendChild(hint);
+      }
+    }
+
+    function exitFallbackFullscreen(card) {
+      card.classList.remove('matrix-fullscreen-fallback');
+      document.body.classList.remove('matrix-fs-active');
+
+      const hint = document.getElementById('fs-exit-hint');
+      if (hint) hint.remove();
+
+      updateFullscreenButton();
+    }
+
+    function updateFullscreenButton() {
+      const btn = document.getElementById('fullscreen-btn');
+      const icon = document.getElementById('fs-icon');
+      const text = document.getElementById('fs-text');
+      if (!btn || !icon) return;
+
+      const isFs = !!document.fullscreenElement || !!document.webkitFullscreenElement ||
+                   document.body.classList.contains('matrix-fs-active');
+
+      if (isFs) {
+        icon.classList.remove('fa-expand');
+        icon.classList.add('fa-compress');
+        if (text) text.textContent = 'Выйти';
+        btn.title = 'Выйти из полноэкранного режима (Esc)';
+      } else {
+        icon.classList.remove('fa-compress');
+        icon.classList.add('fa-expand');
+        if (text) text.textContent = 'Полный экран';
+        btn.title = 'Полноэкранный режим (F)';
+      }
+    }
+
+    function initFullscreenSupport() {
+      // Native fullscreen change events
+      document.addEventListener('fullscreenchange', updateFullscreenButton);
+      document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+
+      // Keyboard shortcut: F key toggles fullscreen when matrix is visible
+      document.addEventListener('keydown', function(e) {
+        if (e.key.toLowerCase() === 'f') {
+          const section = document.getElementById('matrix-section');
+          if (section && !section.classList.contains('hidden') &&
+              document.activeElement.tagName === 'BODY') {
+            e.preventDefault();
+            toggleMatrixFullscreen();
+          }
+        }
+      });
+
+      // Make sure button state is correct on load
+      setTimeout(updateFullscreenButton, 300);
+    }
+    // ==================== END FULLSCREEN ====================
+
+    function labelForJS(key) {
+      return labelFor(key);
+    }
+
+    function exportCSV() {
+      if (!clashes.length) {
+        alert('Нет данных для экспорта');
+        return;
+      }
+
+      const filtered = applyAllFilters(clashes);
+      if (!filtered.length) {
+        alert('Нет данных после применения фильтров');
+        return;
+      }
+
+      if (!rowHierarchy.length && !colHierarchy.length) {
+        alert('Добавьте хотя бы один уровень в иерархию строк или столбцов');
+        return;
+      }
+
+      const { leafMatrix } = buildHierarchicalData(filtered, rowHierarchy, colHierarchy);
+
+      const rowLen = rowHierarchy.length;
+      const colLen = colHierarchy.length;
+
+      const rowHeaders = rowLen
+        ? rowHierarchy.map(h => `${labelFor(h) || h} (строка)`)
+        : ['Итого (строка)'];
+      const colHeaders = colLen
+        ? colHierarchy.map(h => `${labelFor(h) || h} (столбец)`)
+        : ['Итого (столбец)'];
+      const headers = [...rowHeaders, ...colHeaders, 'Количество'];
+
+      const csvRows = [];
+
+      const rowMeta = rowLen ? rowHierarchy.map(labelFor).join(' > ') : 'Итого';
+      const colMeta = colLen ? colHierarchy.map(labelFor).join(' > ') : 'Итого';
+      csvRows.push(`"Текущая матрица: строки = ${rowMeta}"`);
+      csvRows.push(`"Столбцы = ${colMeta}"`);
+      csvRows.push(`"Отфильтровано коллизий: ${filtered.length}"`);
+      if (mirrorMode) {
+        csvRows.push(`"Режим отзеркаливания: включён (${rawClashes.length} исходных × 2 = ${clashes.length})"`);
+      }
+      csvRows.push(''); // blank separator
+
+      // Header row
+      csvRows.push(headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','));
+
+      // Data rows (only combinations that have clashes)
+      leafMatrix.forEach((count, key) => {
+        if (!count) return;
+
+        const { rowVals, colVals } = parseMatrixKey(key, rowLen, colLen);
+        const displayRowVals = rowLen ? rowVals : ['Итого'];
+        const displayColVals = colLen ? colVals : ['Итого'];
+
+        const row = [...displayRowVals, ...displayColVals, count]
+          .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`)
+          .join(',');
+
+        csvRows.push(row);
+      });
+
+      // UTF-8 BOM so Excel correctly opens Cyrillic
+      const csv = '\uFEFF' + csvRows.join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+
+      const baseName = (document.getElementById('file-name')?.textContent || 'clash-matrix')
+        .replace(/[\\/:*?"<>|]/g, '_')
+        .replace(/\s+/g, '_');
+      const rowPart = rowLen ? rowHierarchy.map(labelFor).join('-') : 'Итого-rows';
+      const colPart = colLen ? colHierarchy.map(labelFor).join('-') : 'Итого-cols';
+
+      a.href = url;
+      a.download = `${baseName}_${rowPart}_x_${colPart}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function applyDefaultHierarchies() {
+      const candidates = ['Файл', 'Элемент Категория', 'Уровень', 'Рабочий набор'];
+      rowHierarchy = [];
+      colHierarchy = [];
+      candidates.forEach(c => {
+        if (rowHierarchy.length < 2 && availableProps1.some(p => p.key === c)) rowHierarchy.push(c);
+      });
+      candidates.forEach(c => {
+        if (colHierarchy.length < 2 && availableProps2.some(p => p.key === c)) colHierarchy.push(c);
+      });
+      renderHierarchyUI();
+    }
+
+    function handleFileLoad(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const input = e.target;
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        try {
+          processLoadedReport(ev.target.result, file.name);
+        } catch (err) {
+          alert('Ошибка парсинга: ' + err.message);
+          console.error(err);
+        } finally {
+          input.value = '';
+        }
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+
+    function processLoadedReport(content, filename) {
+      let parsed = [];
+      const lowerName = (filename || '').toLowerCase();
+
+      try {
+        if (lowerName.endsWith('.xml') || content.trim().startsWith('<?xml') || content.includes('<exchange') || content.includes('<clashresult')) {
+          parsed = parseNavisworksXML(content);
+        } else {
+          alert('Для HTML-отчётов используйте предыдущую версию сервиса. Сейчас поддерживается в основном XML формат.');
+          return;
+        }
+      } catch (e) {
+        console.error('Parse error', e);
+        alert('Ошибка разбора файла: ' + e.message);
+        return;
+      }
+
+      rawClashes = parsed;
+      mirrorMode = false;
+      resetMatrixSort();
+      lastMatrixData = null;
+      clearHistory();
+      rebuildClashes();
+      
+      if (!clashes.length) {
+        alert('Не удалось найти коллизии в файле. Убедитесь, что это корректный XML-отчёт Navisworks (Проверка 1.xml).');
+        return;
+      }
+
+      const props = getAllProperties(clashes);
+      availableProps1 = props.item1;
+      availableProps2 = props.item2;
+
+      uniqueTests = [...new Set(clashes.map(c => c.testName).filter(Boolean))];
+      activeTestFilters = [...uniqueTests];
+      uniqueStatuses = collectUniqueStatuses(clashes);
+      activeStatusFilters = [...uniqueStatuses];
+
+      const fileNameEl = document.getElementById('file-name');
+      if (fileNameEl) {
+        fileNameEl.textContent = filename || 'Загруженный отчёт';
+        fileNameEl.className = 'ml-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] rounded';
+      }
+      document.getElementById('loader-section').classList.add('hidden');
+      document.getElementById('controls').classList.remove('hidden');
+      document.getElementById('matrix-section').classList.remove('hidden');
+      document.getElementById('raw-hint').classList.remove('hidden');
+      updateClashCountDisplay();
+      updateMirrorModeUI();
+
+      populatePropertySelectors();
+      renderTestFilters();
+      renderStatusFilters();
+      clearPropertyFilterRows();
+
+      setTimeout(() => {
+        applyLoadedReportSettings();
+      }, 100);
+    }
+
+    function applyLoadedReportSettings() {
+      const activeProfile = activeProfileId
+        ? sessionProfiles.find(p => p.id === activeProfileId)
+        : null;
+
+      if (activeProfile) {
+        applyProfileState(activeProfile.state);
+      } else {
+        applyDefaultHierarchies();
+        buildMatrix();
+      }
+      renderProfileSelector();
+    }
+
+    // Make sure to call this also from checkbox onchange for test filters (already wired in render)
+
+    // DEMO data (synthetic based on real Navisworks XML structure)
+    function loadDemoData() {
+      const demoClashes = [];
+      const models = ['ОВ_Проект.nwc', 'ВК_Проект.nwc'];
+      const levels = ['Этаж 02', 'Этаж 01', 'Этаж 00'];
+      const categories1 = ['Арматура трубопроводов', 'Трубы', 'Сантехнические приборы'];
+      const categories2 = ['Сантехнические приборы', 'Материалы изоляции труб', 'Арматура трубопроводов'];
+      const names1 = ['VC_Теплый пол', 'SMB 0473 000003', 'PEX-a труба'];
+      const names2 = ['VC_Раковина с полупьедесталом', 'ADSK_Трубки теплоизоляционные', 'Керамика'];
+
+      function makeDemoItem(id, model, level, category, name) {
+        return {
+          'ID объекта': String(id),
+          'Уровень': level,
+          'Путь': `Файл > ${model} > ${level} > ${category} > ${name}`,
+          'Модель': model,
+          'Файл': category,
+          'Объект Категория': category,
+          'Объект Рабочий набор': 'Рабочий набор 1',
+          'Элемент Имя': name,
+          'Элемент Тип': 'Твердое тело'
+        };
+      }
+
+      for (let i = 0; i < 38; i++) {
+        const m1 = models[0];
+        const m2 = models[1];
+        const lvl1 = levels[i % levels.length];
+        const lvl2 = levels[(i + 1) % levels.length];
+        const cat1 = categories1[i % categories1.length];
+        const cat2 = categories2[i % categories2.length];
+        const n1 = names1[i % names1.length];
+        const n2 = names2[i % names2.length];
+
+        demoClashes.push({
+          id: i + 1,
+          testName: 'Демо проверка',
+          status: i % 5 === 0 ? 'Решено' : 'Создать',
+          distance: parseFloat((-0.01 * (i % 12) - 0.003).toFixed(3)),
+          description: 'По пересечению (консервативно)',
+          item1: makeDemoItem(770000 + i, m1, lvl1, cat1, n1),
+          item2: makeDemoItem(2100000 + i, m2, lvl2, cat2, n2)
+        });
+      }
+
+      rawClashes = demoClashes;
+      mirrorMode = false;
+      resetMatrixSort();
+      lastMatrixData = null;
+      clearHistory();
+      rebuildClashes();
+
+      const props = getAllProperties(clashes);
+      availableProps1 = props.item1;
+      availableProps2 = props.item2;
+
+      const fileNameEl = document.getElementById('file-name');
+      if (fileNameEl) {
+        fileNameEl.textContent = 'Демо-данные (Проект)';
+        fileNameEl.className = 'ml-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] rounded';
+      }
+      document.getElementById('loader-section').classList.add('hidden');
+      document.getElementById('controls').classList.remove('hidden');
+      document.getElementById('matrix-section').classList.remove('hidden');
+      document.getElementById('raw-hint').classList.remove('hidden');
+      updateClashCountDisplay();
+      updateMirrorModeUI();
+
+      uniqueTests = [...new Set(clashes.map(c => c.testName).filter(Boolean))];
+      activeTestFilters = [...uniqueTests];
+      uniqueStatuses = collectUniqueStatuses(clashes);
+      activeStatusFilters = [...uniqueStatuses];
+
+      populatePropertySelectors();
+      renderTestFilters();
+      renderStatusFilters();
+      clearPropertyFilterRows();
+
+      setTimeout(() => {
+        applyLoadedReportSettings();
+      }, 80);
+    }
+
+    // ==================== SESSION PROFILES ====================
+
+    function captureCurrentProfileState() {
+      updatePropertyFiltersFromDOM();
+      const search = document.getElementById('global-search');
+      return {
+        rowHierarchy: [...rowHierarchy],
+        colHierarchy: [...colHierarchy],
+        activeTestFilters: [...activeTestFilters],
+        activeStatusFilters: [...activeStatusFilters],
+        propertyFilters: propertyFilters.map(({ prop, side, operator, value }) => ({
+          prop,
+          side: side || 'both',
+          operator: operator || 'contains',
+          value: value || ''
+        })),
+        globalSearch: search ? search.value : '',
+        mirrorMode
+      };
+    }
+
+    const LEGACY_PROP_KEYS = {
+      'Категория': 'Файл',
+      'Слой': 'Уровень'
+    };
+
+    function migratePropKey(key) {
+      return LEGACY_PROP_KEYS[key] || key;
+    }
+
+    function sanitizeProfileState(state) {
+      if (!state) return null;
+
+      const row = (state.rowHierarchy || []).map(migratePropKey).filter(k =>
+        k === 'testName' || availableProps1.some(p => p.key === k)
+      );
+      const col = (state.colHierarchy || []).map(migratePropKey).filter(k =>
+        k === 'testName' || availableProps2.some(p => p.key === k)
+      );
+
+      let tests = (state.activeTestFilters || []).filter(t => uniqueTests.includes(t));
+      if (!tests.length && uniqueTests.length) tests = [...uniqueTests];
+
+      let statuses = (state.activeStatusFilters || []).filter(s => uniqueStatuses.includes(s));
+      if (!statuses.length && uniqueStatuses.length) statuses = [...uniqueStatuses];
+
+      const filters = (state.propertyFilters || []).map(f => ({
+        prop: migratePropKey(f.prop || ''),
+        side: f.side || 'both',
+        operator: f.operator || 'contains',
+        value: f.value || ''
+      })).filter(f => f.prop);
+
+      return {
+        rowHierarchy: row,
+        colHierarchy: col,
+        activeTestFilters: tests,
+        activeStatusFilters: statuses,
+        propertyFilters: filters,
+        globalSearch: state.globalSearch || '',
+        mirrorMode: !!state.mirrorMode
+      };
+    }
+
+    function applyProfileState(state) {
+      if (!rawClashes.length) {
+        alert('Сначала загрузите отчёт');
+        return false;
+      }
+
+      const sanitized = sanitizeProfileState(state);
+      if (!sanitized) return false;
+
+      suppressProfileDeselect = true;
+      try {
+        rowHierarchy = [...sanitized.rowHierarchy];
+        colHierarchy = [...sanitized.colHierarchy];
+        activeTestFilters = [...sanitized.activeTestFilters];
+        activeStatusFilters = [...sanitized.activeStatusFilters];
+
+        const search = document.getElementById('global-search');
+        if (search) search.value = sanitized.globalSearch;
+
+        mirrorMode = sanitized.mirrorMode;
+        rebuildClashes();
+        updateClashCountDisplay();
+        updateMirrorModeUI();
+
+        restorePropertyFilterRows(sanitized.propertyFilters);
+        renderHierarchyUI();
+        renderTestFilters();
+        renderStatusFilters();
+        buildMatrix();
+      } finally {
+        suppressProfileDeselect = false;
+      }
+      return true;
+    }
+
+    function renderProfileSelector() {
+      const select = document.getElementById('profile-select');
+      if (!select) return;
+
+      const prev = activeProfileId || select.value;
+      select.innerHTML = '<option value="">Профиль…</option>';
+
+      sessionProfiles
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+        .forEach(profile => {
+          const opt = document.createElement('option');
+          opt.value = profile.id;
+          opt.textContent = profile.name;
+          select.appendChild(opt);
+        });
+
+      if (prev && sessionProfiles.some(p => p.id === prev)) {
+        select.value = prev;
+        activeProfileId = prev;
+      } else {
+        select.value = '';
+        activeProfileId = null;
+      }
+
+      updateProfileControlsState();
+    }
+
+    function updateProfileControlsState() {
+      const hasData = rawClashes.length > 0;
+      const select = document.getElementById('profile-select');
+      const saveBtn = document.getElementById('profile-save-btn');
+      const deleteBtn = document.getElementById('profile-delete-btn');
+
+      if (select) select.disabled = !hasData;
+      if (saveBtn) saveBtn.disabled = !hasData;
+      if (deleteBtn) deleteBtn.disabled = !hasData || !activeProfileId;
+    }
+
+    function onProfileSelectChange(profileId) {
+      if (!profileId) {
+        activeProfileId = null;
+        updateProfileControlsState();
+        return;
+      }
+
+      const profile = sessionProfiles.find(p => p.id === profileId);
+      if (!profile) {
+        activeProfileId = null;
+        renderProfileSelector();
+        return;
+      }
+
+      recordUndoBeforeChange();
+      activeProfileId = profileId;
+      applyProfileState(profile.state);
+      updateProfileControlsState();
+    }
+
+    function saveProfilePrompt() {
+      if (!rawClashes.length) {
+        alert('Сначала загрузите отчёт');
+        return;
+      }
+
+      const current = sessionProfiles.find(p => p.id === activeProfileId);
+      const name = prompt('Название профиля настроек:', current ? current.name : '');
+      if (!name || !name.trim()) return;
+
+      saveProfile(name.trim());
+    }
+
+    function saveProfile(name) {
+      const state = captureCurrentProfileState();
+      const now = new Date().toISOString();
+      const existingByName = sessionProfiles.find(p => p.name === name);
+      const existingById = activeProfileId ? sessionProfiles.find(p => p.id === activeProfileId) : null;
+
+      if (existingByName && existingByName.id !== activeProfileId) {
+        if (!confirm(`Профиль «${name}» уже существует. Перезаписать?`)) return;
+        existingByName.state = state;
+        existingByName.updatedAt = now;
+        activeProfileId = existingByName.id;
+      } else if (existingById && existingById.name === name) {
+        existingById.state = state;
+        existingById.updatedAt = now;
+        activeProfileId = existingById.id;
+      } else if (existingById) {
+        existingById.name = name;
+        existingById.state = state;
+        existingById.updatedAt = now;
+        activeProfileId = existingById.id;
+      } else {
+        const id = 'prof-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        sessionProfiles.push({ id, name, createdAt: now, updatedAt: now, state });
+        activeProfileId = id;
+      }
+
+      renderProfileSelector();
+    }
+
+    function deleteSelectedProfile() {
+      if (!activeProfileId) return;
+
+      const profile = sessionProfiles.find(p => p.id === activeProfileId);
+      if (!profile) return;
+
+      if (!confirm(`Удалить профиль «${profile.name}»?`)) return;
+
+      sessionProfiles = sessionProfiles.filter(p => p.id !== activeProfileId);
+      activeProfileId = null;
+      renderProfileSelector();
+    }
+
+    function initDefaultProfiles() {
+      sessionProfiles = normalizeImportedProfiles(DEFAULT_PROFILES);
+    }
+
+    function normalizeImportedProfiles(data) {
+      const list = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.profiles) ? data.profiles : []);
+
+      return list
+        .filter(p => p && typeof p.name === 'string' && p.state)
+        .map(p => ({
+          id: p.id || ('prof-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
+          name: p.name.trim(),
+          createdAt: p.createdAt || new Date().toISOString(),
+          updatedAt: p.updatedAt || new Date().toISOString(),
+          state: {
+            rowHierarchy: Array.isArray(p.state.rowHierarchy) ? p.state.rowHierarchy : [],
+            colHierarchy: Array.isArray(p.state.colHierarchy) ? p.state.colHierarchy : [],
+            activeTestFilters: Array.isArray(p.state.activeTestFilters) ? p.state.activeTestFilters : [],
+            activeStatusFilters: Array.isArray(p.state.activeStatusFilters) ? p.state.activeStatusFilters : [],
+            propertyFilters: Array.isArray(p.state.propertyFilters) ? p.state.propertyFilters : [],
+            globalSearch: p.state.globalSearch || '',
+            mirrorMode: !!p.state.mirrorMode
+          }
+        }))
+        .filter(p => p.name);
+    }
+
+    function exportProfiles() {
+      if (!sessionProfiles.length) {
+        alert('Нет сохранённых профилей для экспорта');
+        return;
+      }
+
+      const payload = {
+        format: PROFILE_FORMAT,
+        version: PROFILE_VERSION,
+        exportedAt: new Date().toISOString(),
+        profiles: sessionProfiles
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'clash-matrix-profiles.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function triggerProfileImport() {
+      const input = document.getElementById('profile-import-input');
+      if (input) input.click();
+    }
+
+    function handleProfileImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const input = event.target;
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        try {
+          const data = JSON.parse(ev.target.result);
+          const imported = normalizeImportedProfiles(data);
+
+          if (!imported.length) {
+            alert('В файле не найдено корректных профилей');
+            return;
+          }
+
+          let added = 0;
+          let replaced = 0;
+
+          imported.forEach(item => {
+            const byName = sessionProfiles.find(p => p.name === item.name);
+            if (byName) {
+              if (!confirm(`Профиль «${item.name}» уже есть в сессии. Заменить импортированным?`)) {
+                item.name = item.name + ' (импорт)';
+                sessionProfiles.push(item);
+                added++;
+              } else {
+                byName.state = item.state;
+                byName.updatedAt = item.updatedAt;
+                replaced++;
+              }
+            } else {
+              sessionProfiles.push(item);
+              added++;
+            }
+          });
+
+          renderProfileSelector();
+          alert(`Импорт завершён: добавлено ${added}, заменено ${replaced}`);
+        } catch (err) {
+          alert('Ошибка чтения файла профилей: ' + err.message);
+        } finally {
+          input.value = '';
+        }
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+
+    // ==================== END SESSION PROFILES ====================
+
+    function resetAll() {
+      clashes = [];
+      rawClashes = [];
+      resetMatrixSort();
+      lastMatrixData = null;
+      clearHistory();
+      mirrorMode = false;
+      rowHierarchy = [];
+      colHierarchy = [];
+      uniqueTests = [];
+      activeTestFilters = [];
+      uniqueStatuses = [];
+      activeStatusFilters = [];
+      propertyFilters = [];
+      availableProps1 = [];
+      availableProps2 = [];
+
+      const fileInput = document.getElementById('file-input');
+      if (fileInput) fileInput.value = '';
+
+      const search = document.getElementById('global-search');
+      if (search) search.value = '';
+
+      clearPropertyFilterRows();
+      updateMirrorModeUI();
+      updateClashCountDisplay();
+
+      document.getElementById('matrix-container').innerHTML = '';
+      document.getElementById('matrix-title').textContent = '';
+      document.getElementById('stats').innerHTML = '';
+      document.getElementById('loader-section').classList.remove('hidden');
+      document.getElementById('controls').classList.add('hidden');
+      document.getElementById('matrix-section').classList.add('hidden');
+      document.getElementById('raw-hint').classList.add('hidden');
+      const fileNameEl = document.getElementById('file-name');
+      if (fileNameEl) {
+        fileNameEl.textContent = 'Отчёт не загружен';
+        fileNameEl.className = 'ml-1 px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded';
+      }
+
+      const testFiltersActions = document.getElementById('test-filters-actions');
+      if (testFiltersActions) testFiltersActions.classList.add('hidden');
+      const testFilters = document.getElementById('test-filters');
+      if (testFilters) testFilters.innerHTML = '';
+
+      const statusFiltersActions = document.getElementById('status-filters-actions');
+      if (statusFiltersActions) statusFiltersActions.classList.add('hidden');
+      const statusFilters = document.getElementById('status-filters');
+      if (statusFilters) statusFilters.innerHTML = '';
+
+      const rowHierarchyEl = document.getElementById('row-hierarchy');
+      if (rowHierarchyEl) rowHierarchyEl.innerHTML = '';
+      const colHierarchyEl = document.getElementById('col-hierarchy');
+      if (colHierarchyEl) colHierarchyEl.innerHTML = '';
+
+      activeProfileId = null;
+      renderProfileSelector();
+    }
+
+    // Keyboard support
+    function initKeyboard() {
+      document.addEventListener('keydown', function(e) {
+        const tag = document.activeElement?.tagName;
+        const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+        if ((e.ctrlKey || e.metaKey) && !inField) {
+          if (e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            undoChange();
+            return;
+          }
+          if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+            e.preventDefault();
+            redoChange();
+            return;
+          }
+        }
+
+        if (e.key === '/' && document.activeElement.tagName === 'BODY') {
+          e.preventDefault();
+          // legacy row-prop reference removed
+          if (sel) sel.focus();
+        }
+      });
+    }
+
+    function init() {
+      tailwindInit();
+      initKeyboard();
+      initFullscreenSupport();
+      initDefaultProfiles();
+      renderProfileSelector();
+      updateHistoryButtons();
+
+      // Auto hint if file exists in same folder context
+      console.log('%c[Navisworks Matrix] HTML сервис готов. Загрузите отчёт.', 'color:#64748b');
+      
+      // Optional: user can also drag the whole folder later
+      const dropZone = document.body;
+      dropZone.addEventListener('dragover', e => e.preventDefault());
+      dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        const file = e.dataTransfer.files[0];
+        if (file && (file.name.toLowerCase().endsWith('.xml') || file.name.toLowerCase().endsWith('.html'))) {
+          const reader = new FileReader();
+          reader.onload = ev => processLoadedReport(ev.target.result, file.name);
+          reader.readAsText(file, 'UTF-8');
+        }
+      });
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
